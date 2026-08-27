@@ -1,8 +1,9 @@
 # Changelog
 
-## 0.1.0
+## 0.1.1
 
-First release.
+First published release. `0.1.0` existed only during development and was never published, so
+everything below is what ships in `0.1.1`.
 
 ### Added
 
