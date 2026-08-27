@@ -3,7 +3,7 @@
 | React | Status | Notes |
 | --- | --- | --- |
 | 19.x | **Tested** | Test suite and benchmarks run here. `ref` is an ordinary prop, so it passes through `withRenderDetective`'s spread. |
-| 18.x | Supported by API surface, not yet exercised in CI | Everything used is 16.9+ public API. `ref` is *not* a prop before 19 — wrap with `forwardRef` yourself if a wrapped component needs one. |
+| 18.x | **Tested** (74 tests, one behavioural difference below) | `ref` is *not* a prop before 19 — wrap with `forwardRef` yourself if a wrapped component needs one. |
 | 17.x, 16.9+ | Supported by API surface | `Profiler`, `createContext`, `useState`, `useRef`, `useLayoutEffect`. |
 | < 16.9 | Not supported | `Profiler` is unavailable. |
 
@@ -24,7 +24,14 @@ behind a capability check in `src/react/adapters/`, never inline.
 ## Behaviour worth knowing
 
 - **StrictMode** double-invokes render functions in development. Renders are counted per *commit*,
-  and the extra invocation is reported as a development replay. Statistics are never doubled.
+  so statistics are never doubled on any version.
+
+  Whether the extra invocation can be *labelled* differs: React 19 re-runs the render function
+  against the same hook state, so both passes reach the same instrumented node and the replay is
+  named in the evidence. React 18 discards the first pass's hook state, so the extra attempt is
+  never observed — counts remain correct, but you will not see the "development replay" line.
+  `useTrackedState`'s ownership guard uses `useId`, which is React 18+; on React 17 and below the
+  guard is skipped (see the note on `useTrackedState` in the API reference).
 - **Concurrent rendering**: `onRender` fires only for committed work. Attempts with no commit are
   swept and counted separately as uncommitted; they never enter the performance numbers.
 - **Fast Refresh**: the detective is pinned to a `globalThis` symbol, so a reloaded module reuses

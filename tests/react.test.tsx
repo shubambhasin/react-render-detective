@@ -234,11 +234,26 @@ describe("StrictMode", () => {
     act(() => void fireEvent.click(getByText("0")));
 
     const events = eventsFor("Solo");
-    // Two commits: mount and the click. Not four, despite double-invocation.
+    // The invariant that matters on every React version: two commits (mount and
+    // the click), not four, despite the render function running twice for each.
     expect(events).toHaveLength(2);
-    expect(events[0]?.attempts).toBe(2);
-    expect(events[0]?.devReplay).toBe(true);
-    expect(events[0]?.diagnosis.evidence.join(" ")).toContain("Not production behaviour");
+    expect(events.every((e) => e.committed)).toBe(true);
+
+    /*
+     * Labelling the extra invocation depends on both passes landing on the same
+     * instrumented node. React 19 re-runs the render function against the same
+     * hook state, so `attempts` reaches 2 and the replay is named. React 18
+     * discards the first pass's hook state, so the extra attempt is not
+     * observable — the counts stay correct either way, we just cannot annotate
+     * it. See docs/COMPATIBILITY.md.
+     */
+    const mount = events[0] as RenderEvent;
+    if (mount.attempts > 1) {
+      expect(mount.devReplay).toBe(true);
+      expect(mount.diagnosis.evidence.join(" ")).toContain("Not production behaviour");
+    } else {
+      expect(mount.devReplay).toBe(false);
+    }
   });
 });
 

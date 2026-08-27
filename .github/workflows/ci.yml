@@ -18,6 +18,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # React 18 needs the matching Testing Library major; the package itself is
+      # unchanged between the two runs.
       - name: Install React ${{ matrix.react }}
         if: matrix.react != '19'
         run: npm install --no-save react@${{ matrix.react }} react-dom@${{ matrix.react }} @testing-library/react@14

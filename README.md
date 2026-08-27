@@ -11,10 +11,10 @@
 [Guide](docs/GUIDE.md) · [API](docs/API.md) · [Feasibility report](docs/FEASIBILITY.md) ·
 [Benchmarks](docs/BENCHMARKS.md)
 
-> **Status: 0.1.0, early release.** Tests, benchmarks and bundle budgets are green, and the packed
-> package is verified in a clean install for ESM, CJS and TypeScript consumers. Not yet exercised:
-> a real browser (all testing is jsdom), React 18, and Suspense / error-boundary edges. Treat it as
-> a preview — issues welcome.
+> **Status: 0.1.0, early release.** 74 tests pass on React 18 and 19, benchmarks and bundle budgets
+> are green, and the packed package is verified in a clean install for ESM, CJS and TypeScript
+> consumers. Not yet exercised: a real browser (all testing is jsdom) and Suspense / error-boundary
+> edges. Treat it as a preview — issues welcome.
 
 Not just:
 
@@ -270,7 +270,8 @@ The headlines:
 
 ## React support
 
-React 16.9+ (`Profiler`, context, refs — all public API). Tested against React 19.
+React 16.9+ (`Profiler`, context, refs — all public API). Tested against React 18 and 19; see
+[docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) for the one behavioural difference between them.
 
 ## License
 

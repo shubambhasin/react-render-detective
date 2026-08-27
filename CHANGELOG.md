@@ -23,6 +23,11 @@ First release.
 - Zero runtime dependencies, ESM + CJS + types, `sideEffects: false`, three entry points.
 - Bundle-size budgets in CI and an instrumentation-overhead benchmark suite.
 
+### Verified
+
+- React 18 and React 19, 74 tests each.
+- Packed tarball installed into a clean project: ESM, CJS and TypeScript consumers all resolve.
+
 ### Known limitations
 
 See [docs/FEASIBILITY.md](docs/FEASIBILITY.md). Briefly: no source locations (needs a build-time
