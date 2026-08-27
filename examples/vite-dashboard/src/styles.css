@@ -1,0 +1,29 @@
+:root { color-scheme: light dark; font-family: ui-sans-serif, system-ui, sans-serif; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #f6f7f9; color: #16181d; }
+.app { min-height: 100vh; }
+.banner { display: flex; gap: 12px; align-items: center; padding: 10px 16px; background: #fff5e0; border-bottom: 1px solid #f0dcae; font-size: 14px; }
+.banner .spacer, .navbar .spacer { flex: 1; }
+.navbar { display: flex; gap: 10px; align-items: center; padding: 12px 16px; background: #fff; border-bottom: 1px solid #e4e6ea; }
+.navbar .user { color: #6b7280; }
+.body { display: flex; align-items: flex-start; }
+.sidebar { display: flex; flex-direction: column; width: 180px; padding: 16px; gap: 4px; }
+.sidebar a { padding: 6px 10px; border-radius: 6px; color: #4b5563; cursor: pointer; }
+.sidebar a.active { background: #e8edff; color: #1d4ed8; font-weight: 600; }
+main { flex: 1; padding: 16px 24px; display: flex; flex-direction: column; gap: 16px; }
+.filters { display: flex; gap: 8px; }
+input, select, button { font: inherit; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; }
+button { cursor: pointer; }
+.chart { display: flex; flex-direction: column; gap: 6px; background: #fff; border: 1px solid #e4e6ea; border-radius: 8px; padding: 12px; }
+.bar { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.bar-label { width: 80px; color: #6b7280; }
+.bar-fill { height: 10px; background: #3b82f6; border-radius: 5px; }
+.bar-value { color: #9ca3af; }
+.table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #e4e6ea; border-radius: 8px; overflow: hidden; font-size: 14px; }
+.table th, .table td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #f1f2f4; }
+.table th { background: #fafbfc; color: #6b7280; font-weight: 600; }
+.table .num { text-align: right; }
+.table tbody tr:hover { background: #f8fafc; cursor: pointer; }
+.pagination { display: flex; gap: 12px; align-items: center; }
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: grid; place-items: center; }
+.modal { background: #fff; padding: 20px 24px; border-radius: 10px; max-width: 380px; }

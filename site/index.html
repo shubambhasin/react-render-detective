@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>React Render Detective — know why your components render</title>
+<meta name="description" content="A development-time React tool that answers why a component rendered — props, parent, context or state — with the changed value, the evidence, and a confidence level.">
+<meta property="og:title" content="React Render Detective">
+<meta property="og:description" content="Know WHY your React components render. Not just that they did.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>">
+<style>
+  :root {
+    --bg: #ffffff; --bg-soft: #f6f7f9; --panel: #0f1116; --panel-text: #d7dce4;
+    --text: #16181d; --muted: #5b6472; --line: #e3e6ea;
+    --accent: #2f6df6; --accent-soft: #e8efff;
+    --red: #d9483b; --amber: #b7791f; --green: #1f7a4d;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0c0e12; --bg-soft: #14171d; --panel: #05070a; --panel-text: #cfd6e0;
+      --text: #e6e9ee; --muted: #98a2b3; --line: #232833;
+      --accent: #6f9bff; --accent-soft: #17203a;
+      --red: #ff8b7d; --amber: #e8b45c; --green: #6fd39b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  a { color: var(--accent); }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 0 24px; }
+  header { padding: 72px 0 40px; border-bottom: 1px solid var(--line); }
+  .eyebrow { font-family: var(--mono); font-size: 13px; color: var(--muted); letter-spacing: .04em; }
+  h1 { font-size: clamp(34px, 6vw, 52px); line-height: 1.1; margin: 14px 0 8px; letter-spacing: -0.02em; }
+  .tagline { font-size: clamp(18px, 2.6vw, 22px); color: var(--muted); margin: 0 0 28px; max-width: 40ch; }
+  .cta { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .btn { display: inline-block; padding: 9px 16px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 15px; border: 1px solid var(--line); color: var(--text); background: var(--bg-soft); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .badges { margin-top: 18px; display: flex; gap: 8px; flex-wrap: wrap; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .badge { border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; }
+  section { padding: 48px 0; border-bottom: 1px solid var(--line); }
+  h2 { font-size: 26px; letter-spacing: -0.01em; margin: 0 0 6px; }
+  h3 { font-size: 17px; margin: 28px 0 8px; }
+  .sub { color: var(--muted); margin: 0 0 22px; }
+  pre { background: var(--panel); color: var(--panel-text); padding: 16px 18px; border-radius: 10px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.6; margin: 0 0 16px; }
+  code { font-family: var(--mono); font-size: .93em; }
+  p code, li code, td code { background: var(--bg-soft); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; }
+  .cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 720px) { .cmp { grid-template-columns: 1fr; } }
+  .cmp > div { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .cmp h4 { margin: 0; padding: 10px 14px; font-size: 13px; font-family: var(--mono); font-weight: 600; background: var(--bg-soft); border-bottom: 1px solid var(--line); color: var(--muted); }
+  .cmp pre { border-radius: 0; margin: 0; }
+  .dim { color: var(--muted); }
+  .red { color: var(--red); } .amber { color: var(--amber); } .green { color: var(--green); }
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 13px; }
+  td.num, th.num { text-align: right; font-family: var(--mono); }
+  ul { padding-left: 20px; } li { margin: 6px 0; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 720px) { .grid3 { grid-template-columns: 1fr; } }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 16px; background: var(--bg-soft); }
+  .card b { display: block; margin-bottom: 4px; }
+  .card span { color: var(--muted); font-size: 14.5px; }
+  .note { border-left: 3px solid var(--amber); background: var(--bg-soft); padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 20px 0; }
+  footer { padding: 40px 0 64px; color: var(--muted); font-size: 14px; }
+  footer a { color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="eyebrow">react-render-detective</div>
+    <h1>Know <em>why</em> your React components render.</h1>
+    <p class="tagline">Not just that they did. The changed value, where it came from, what it cost, and how sure we are.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/shubambhasin/react-render-detective">GitHub</a>
+      <a class="btn" href="https://www.npmjs.com/package/react-render-detective">npm</a>
+      <a class="btn" href="https://github.com/shubambhasin/react-render-detective/blob/main/docs/GUIDE.md">Guide</a>
+      <a class="btn" href="https://github.com/shubambhasin/react-render-detective/blob/main/docs/FEASIBILITY.md">What React can actually tell us</a>
+    </div>
+    <div class="badges">
+      <span class="badge">12.4 KB gzip, everything loaded</span>
+      <span class="badge">zero runtime dependencies</span>
+      <span class="badge">no private React internals</span>
+      <span class="badge">nothing leaves your machine</span>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>The difference</h2>
+    <p class="sub">Every render tool can count renders. Counting is not the hard part.</p>
+    <div class="cmp">
+      <div>
+        <h4>What you usually get</h4>
+<pre>UserProfile rendered 47 times.</pre>
+      </div>
+      <div>
+        <h4>What you actually need</h4>
+<pre>UserProfile rendered because `user`
+changed by reference.
+Its values are identical.
+Dashboard recreated the object.</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Install</h2>
+<pre>npm install react-render-detective</pre>
+<pre><span class="dim">// once, at your entry point</span>
+import { init } from "react-render-detective";
+if (process.env.NODE_ENV !== "production") init();
+
+<span class="dim">// then wrap whatever you suspect</span>
+import { withRenderDetective } from "react-render-detective";
+const UserProfile = withRenderDetective(function UserProfile({ user, onSave }) {
+  return /* … */;
+});</pre>
+    <p class="sub">No server, no account, no API key, no browser extension.</p>
+<pre><span class="amber">▲</span> [RRD] UserProfile #47  Reason: prop changed (reference only)  Changed: user  Duration: 8.4ms</pre>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Ask for the whole story</h2>
+    <p class="sub"><code>explain()</code> aggregates every recorded render of one component into one answer.</p>
+<pre>&gt; rrd.explain("ProductRow")
+
+ProductRow
+
+143 recorded renders
+
+Why?
+  <span class="red">87% of renders followed `filters` changing by reference while its contents stayed the same.</span>
+
+Breakdown
+  props                 124  87%
+  parent                 15  10%
+  mount                   1   1%
+  state-or-external       3   2%
+
+Reference-only prop changes
+  filters               124  87%  (object)
+  onSelect              118  83%  (function)
+
+Cost
+  average       12.4ms
+  total         1773.2ms
+  potentially avoidable  124 render(s), ~1537.6ms
+
+Next step
+  Find where `filters` is created in ProductPage and stabilise it
+  (useMemo, or pass the primitive fields you use).
+
+Confidence: <span class="green">high</span></pre>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Three rules it holds to</h2>
+    <div class="grid3">
+      <div class="card">
+        <b>Rendering is not a bug</b>
+        <span>Output says <em>render</em>, <em>potentially avoidable render</em>, <em>slow render</em>. Never “BAD RENDER”. Most renders are fine.</span>
+      </div>
+      <div class="card">
+        <b>Memoization is a trade</b>
+        <span><code>React.memo</code> is suggested only when the evidence supports it, with the cost shown so you can decide. Never blanket advice.</span>
+      </div>
+      <div class="card">
+        <b>StrictMode is not a 2× regression</b>
+        <span>Double-invoked renders are labelled development replays and excluded from every statistic.</span>
+      </div>
+    </div>
+    <div class="note">
+      When the runtime genuinely cannot tell you why something rendered, it says
+      <code>Cause could not be determined reliably.</code> — rather than inventing a cause.
+      Every diagnosis carries <code>high</code> / <code>medium</code> / <code>low</code> confidence,
+      and the limitation behind it is printed with it.
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>What it can tell you</h2>
+    <table>
+      <thead><tr><th>Question</th><th>Answer</th></tr></thead>
+      <tbody>
+        <tr><td>What rendered?</td><td>component, render number, mount vs update</td></tr>
+        <tr><td>Why?</td><td>props · parent · context · state · external store — with the evidence</td></tr>
+        <tr><td>What changed?</td><td>per prop: a real value change vs a <em>reference-only</em> change</td></tr>
+        <tr><td>Where from?</td><td>the nearest instrumented ancestor, and whether it re-rendered</td></tr>
+        <tr><td>How expensive?</td><td>subtree duration, and self duration with instrumented descendants subtracted</td></tr>
+        <tr><td>How sure are we?</td><td><code>high</code> / <code>medium</code> / <code>low</code>, on every single diagnosis</td></tr>
+        <tr><td>What next?</td><td>an evidence-based suggestion — or nothing at all</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Cost</h2>
+    <p class="sub">Measured against the built package. Full method and caveats in <a href="https://github.com/shubambhasin/react-render-detective/blob/main/docs/BENCHMARKS.md">BENCHMARKS.md</a>.</p>
+    <table>
+      <thead><tr><th>Instrumented share of a 2 000-component tree</th><th class="num">Baseline</th><th class="num">Instrumented</th><th class="num">Overhead</th></tr></thead>
+      <tbody>
+        <tr><td>2%</td><td class="num">35.02 ms</td><td class="num">36.89 ms</td><td class="num green">+5.3%</td></tr>
+        <tr><td>10%</td><td class="num">36.22 ms</td><td class="num">38.34 ms</td><td class="num green">+5.9%</td></tr>
+        <tr><td>50%</td><td class="num">35.55 ms</td><td class="num">49.42 ms</td><td class="num amber">+39.0%</td></tr>
+      </tbody>
+    </table>
+    <p class="sub" style="margin-top:16px">
+      Roughly <strong>10 µs per instrumented component</strong>, flat with tree size — against the 0.1 ms
+      target, that is about 8× headroom. Percentage overhead is a function of how many components you
+      wrap and how much work each does: wrapping every trivial leaf in a big tree is expensive, and the
+      benchmark says so rather than quoting only the flattering number.
+    </p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Honest limitations</h2>
+    <p class="sub">This package uses <strong>no private React APIs</strong>. That costs it some things, and every one of them is written down.</p>
+    <ul>
+      <li><strong>Parent</strong> means <em>nearest instrumented ancestor</em>. Uninstrumented components in between are reported as such, not glossed over.</li>
+      <li><strong>Context subscriptions</strong> are not enumerable at runtime. Context-driven renders are correlation within one commit, at medium confidence, and only for contexts you track.</li>
+      <li><strong>State values</strong> are not readable without internals. An untracked state render is reported as <code>state-or-external</code> — we say we cannot tell which.</li>
+      <li><strong>Source locations</strong> need a build-time transform (<code>_debugSource</code> was removed in React 19), so they are not in v1.</li>
+      <li><strong>Self duration</strong> is an upper bound: React exposes subtree time, and we subtract the instrumented descendants we know about.</li>
+    </ul>
+    <p><a href="https://github.com/shubambhasin/react-render-detective/blob/main/docs/FEASIBILITY.md">The full feasibility report</a> classifies every feature as reliable, inferred, or impossible without internals — written before any of it was built.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Status</h2>
+    <div class="note">
+      <strong>0.1.0 — early release.</strong> The test suite, benchmarks and bundle budgets are green, and
+      the packed package is verified in a clean install for ESM, CJS and TypeScript consumers. Not yet
+      exercised: a real browser (all testing is jsdom), React 18, and Suspense / error-boundary edges.
+      Treat it as a preview and please report what it gets wrong.
+    </div>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/shubambhasin/react-render-detective/issues">Report an issue</a>
+      <a class="btn" href="https://github.com/shubambhasin/react-render-detective/tree/main/examples/vite-dashboard">Demo dashboard</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    MIT licensed · <a href="https://github.com/shubambhasin/react-render-detective">github.com/shubambhasin/react-render-detective</a>
+    · No telemetry, no network requests, no analytics — <a href="https://github.com/shubambhasin/react-render-detective/blob/main/docs/GUIDE.md#privacy">privacy</a>
+  </div>
+</footer>
+
+</body>
+</html>

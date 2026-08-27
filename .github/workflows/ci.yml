@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push: { branches: [main] }
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        react: ["19", "18"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install React ${{ matrix.react }}
+        if: matrix.react != '19'
+        run: npm install --no-save react@${{ matrix.react }} react-dom@${{ matrix.react }} @testing-library/react@14
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Bundle size budgets
+        run: node scripts/size.mjs
+      - name: Package contents
+        run: npm pack --dry-run
+
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run build
+      - run: node --expose-gc bench/run.mjs

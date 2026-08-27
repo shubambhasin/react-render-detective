@@ -1,0 +1,17 @@
+import { defineConfig } from "tsup";
+
+export default defineConfig({
+  entry: {
+    index: "src/index.ts",
+    core: "src/core/index.ts",
+    overlay: "src/overlay/index.ts",
+  },
+  format: ["esm", "cjs"],
+  dts: true,
+  clean: true,
+  treeshake: true,
+  splitting: true,
+  sourcemap: true,
+  target: "es2020",
+  external: ["react", "react-dom"],
+});
