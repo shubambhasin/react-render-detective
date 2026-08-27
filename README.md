@@ -11,10 +11,12 @@
 [Guide](docs/GUIDE.md) · [API](docs/API.md) · [Feasibility report](docs/FEASIBILITY.md) ·
 [Benchmarks](docs/BENCHMARKS.md)
 
-> **Status: 0.1.0, early release.** 74 tests pass on React 18 and 19, benchmarks and bundle budgets
-> are green, and the packed package is verified in a clean install for ESM, CJS and TypeScript
-> consumers. Not yet exercised: a real browser (all testing is jsdom) and Suspense / error-boundary
-> edges. Treat it as a preview — issues welcome.
+> **Status: 0.1.0, early release.** 76 tests pass on React 18 and 19; benchmarks and bundle budgets
+> are green; the packed package is verified in a clean install for ESM, CJS and TypeScript
+> consumers; and the demo dashboard has been driven end to end in Chrome, which found four real
+> defects the jsdom suite had missed (see the [changelog](CHANGELOG.md)). Not yet exercised:
+> Suspense and error-boundary edges, and any app that isn't the demo. Treat it as a preview —
+> issues welcome.
 
 Not just:
 
