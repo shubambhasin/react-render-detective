@@ -1,9 +1,19 @@
 # Changelog
 
+## 0.1.2
+
+**Use this version.** `0.1.1` shipped a broken `package.json`: a stray
+`npm install --package-lock-only` had written a `dependencies` block into it listing ~200
+transitive dev packages as runtime dependencies of this package. Installing `0.1.1` therefore
+pulls in the whole dev toolchain, and fails outright on Linux because the darwin-only `fsevents`
+is among them. `0.1.2` is byte-identical in behaviour and declares what it actually needs: no
+dependencies, and `react` as its only peer.
+
+`0.1.0` was published before the four defects below were found, and should also be avoided.
+
 ## 0.1.1
 
-First published release. `0.1.0` existed only during development and was never published, so
-everything below is what ships in `0.1.1`.
+Withdrawn — see above. Contents are otherwise the same as `0.1.2`.
 
 ### Added
 
