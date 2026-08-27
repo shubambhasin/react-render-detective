@@ -41,6 +41,10 @@ describe("explain", () => {
     const text = explain("ProductRow") as string;
     expect(text).toContain("filters");
     expect(text).toContain("ProductPage");
+    expect(text).toContain("of updates");
+    // The nearest instrumented ancestor is where the prop *arrives* from, which
+    // is not a claim about where it is created.
+    expect(text).toContain("Trace `filters` back from ProductPage");
     expect(text).toContain("Confidence: high");
   });
 
@@ -77,5 +81,50 @@ describe("explain", () => {
   it("returns undefined for a component it never saw", () => {
     init({ enabled: true, mode: "silent" });
     expect(explain("NeverRendered")).toBeUndefined();
+  });
+});
+
+describe("explain honesty", () => {
+  it("never calls reference-only changes 'new values', and excludes mounts from shares", () => {
+    init({ enabled: true, mode: "silent" });
+
+    const Row = withRenderDetective(
+      function Row(_: { item: { id: number }; onSelect: () => void }) {
+        return <li>row</li>;
+      },
+      { name: "HonestRow" },
+    );
+
+    const item = { id: 1 }; // stable — only the callback churns
+    const List = withRenderDetective(
+      function List() {
+        const [tick, setTick] = useState(0);
+        const onSelect = () => {}; // recreated every render
+        return (
+          <div>
+            <button onClick={() => setTick(tick + 1)}>tick</button>
+            {[0, 1, 2].map((i) => (
+              <Row key={i} item={item} onSelect={onSelect} />
+            ))}
+          </div>
+        );
+      },
+      { name: "HonestList" },
+    );
+
+    const { getByText } = render(<List />);
+    for (let i = 0; i < 2; i++) act(() => void fireEvent.click(getByText("tick")));
+
+    const e = explainStructured("HonestRow");
+    expect(e).toBeDefined();
+    expect(e?.mounts).toBe(3);
+    // 3 rows × 2 updates = 6 updates, every one caused by `onSelect`.
+    expect(e?.unstableProps[0]?.key).toBe("onSelect");
+    expect(e?.unstableProps[0]?.share).toBe(1);
+
+    const text = explain("HonestRow") as string;
+    expect(text).not.toContain("genuinely new values");
+    expect(text).toContain("onSelect");
+    expect(text).toContain("(3 mounts)");
   });
 });

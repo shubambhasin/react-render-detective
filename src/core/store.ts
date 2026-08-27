@@ -1,4 +1,4 @@
-import { defaultConfig, mergeConfig, shouldInstrument } from "./config.js";
+import { defaultConfig, detectProduction, mergeConfig, shouldInstrument } from "./config.js";
 import { diffProps } from "./compare.js";
 import { diagnose } from "./diagnose.js";
 import { RingBuffer } from "./ringBuffer.js";
@@ -119,9 +119,16 @@ export class Detective {
     this.events = new RingBuffer<RenderEvent>(this.config.maxEvents);
   }
 
-  /** Idempotent: repeated calls reconfigure, they never duplicate anything (§47). */
+  /**
+   * Idempotent: repeated calls reconfigure, they never duplicate anything (§47).
+   *
+   * Calling `init()` *is* the intent to turn diagnostics on, so `enabled`
+   * defaults to true unless a production build is positively detected. Guard
+   * the call itself for production safety — that is what the docs show, and it
+   * is what lets a bundler drop the whole thing.
+   */
   init(options: DetectiveOptions = {}): Detective {
-    this.configure(options);
+    this.configure({ enabled: !detectProduction(), ...options });
     this.initialized = true;
     return this;
   }
@@ -189,9 +196,18 @@ export class Detective {
   }
 
   detach(node: NodeRecord): void {
-    // Drop prop references immediately — never retain application state (§26).
-    node.prevProps = undefined;
-    node.pendingProps = undefined;
+    /*
+     * Registry removal only — deliberately NOT clearing `prevProps`.
+     *
+     * StrictMode simulates an unmount/remount by running every effect's cleanup
+     * and then the effect again. Wiping the previous props here made the first
+     * real update after mount diff against `{}` and report every prop as newly
+     * added — a confident, wrong diagnosis on the first update of every
+     * component in a StrictMode app.
+     *
+     * Memory is bounded by dropping the node from the registry: after a genuine
+     * unmount nothing references it, so it is collected along with its props.
+     */
     this.nodes.delete(node.id);
   }
 

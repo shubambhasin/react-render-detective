@@ -3,22 +3,35 @@ import type { DetectiveConfig, DetectiveOptions } from "./types.js";
 declare const process: { env?: Record<string, string | undefined> } | undefined;
 
 /**
- * Best-effort dev detection. No bundler-specific globals are referenced in the
- * core (`import.meta.env` is Vite-only), so this works everywhere and defaults
- * to **off** when it cannot tell — production safety over convenience (§29).
+ * Positive production detection.
+ *
+ * Deliberately asymmetric: this returns `true` only when it can actually *see*
+ * `NODE_ENV === "production"`. Anything else — including environments where
+ * `process` does not exist at all, such as a Vite dev server in the browser —
+ * is "not known to be production".
+ *
+ * The earlier version asked the opposite question ("is this dev?") and answered
+ * `false` when it could not tell, which meant the documented Vite quick-start
+ * turned the tool on and then silently recorded nothing.
  */
-export function detectDev(): boolean {
+export function detectProduction(): boolean {
   try {
     const env = typeof process !== "undefined" ? process?.env : undefined;
-    if (env && env.NODE_ENV) return env.NODE_ENV !== "production";
+    if (env && env.NODE_ENV) return env.NODE_ENV === "production";
   } catch {
     /* ignore */
   }
   return false;
 }
 
+/** @deprecated Use `detectProduction()`. Kept so existing imports keep working. */
+export function detectDev(): boolean {
+  return !detectProduction();
+}
+
 export const defaultConfig: DetectiveConfig = {
-  enabled: detectDev(),
+  // Off until `init()` is called, so importing the package costs nothing.
+  enabled: false,
   mode: "console",
   include: [],
   exclude: [],

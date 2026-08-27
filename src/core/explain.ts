@@ -3,6 +3,8 @@ import type { Confidence, RenderEvent, RenderReason } from "./types.js";
 export interface Explanation {
   component: string;
   renders: number;
+  /** Mounts are excluded from every share below — they cannot be optimised away. */
+  mounts: number;
   /** Reason → share of renders, descending. */
   breakdown: Array<{ reason: RenderReason; count: number; share: number }>;
   /** Props that most often changed by reference only, descending. */
@@ -25,12 +27,24 @@ export function explainEvents(component: string, events: RenderEvent[]): Explana
   const mine = events.filter((e) => e.component.name === component);
   if (mine.length === 0) return undefined;
 
+  /*
+   * Shares are measured against *updates*, not against every recorded render.
+   * Mounts happen once per instance and are not something you can optimise
+   * away, so counting them in the denominator quietly deflates the share of
+   * whatever is actually driving the re-renders — on a 20-row list, a prop
+   * responsible for every single update reads as "33%".
+   */
+  const updates = mine.filter((e) => e.phase !== "mount");
+  const denominator = updates.length || mine.length;
+
   const reasonCounts = new Map<RenderReason, number>();
   const unstable = new Map<string, { count: number; valueType: string }>();
   let totalSelf = 0;
   let avoidable = 0;
   let avoidableTime = 0;
   let replays = 0;
+  let propsWithNewValues = 0;
+  let propsReferenceOnly = 0;
 
   for (const e of mine) {
     reasonCounts.set(e.diagnosis.reason, (reasonCounts.get(e.diagnosis.reason) ?? 0) + 1);
@@ -39,6 +53,10 @@ export function explainEvents(component: string, events: RenderEvent[]): Explana
     if (e.diagnosis.potentiallyAvoidable) {
       avoidable++;
       avoidableTime += e.timings.selfDuration;
+    }
+    if (e.diagnosis.reason === "props") {
+      if (e.changedProps.some((c) => c.kind !== "reference")) propsWithNewValues++;
+      else propsReferenceOnly++;
     }
     for (const c of e.changedProps) {
       if (c.kind !== "reference") continue;
@@ -53,10 +71,14 @@ export function explainEvents(component: string, events: RenderEvent[]): Explana
     .sort((a, b) => b.count - a.count);
 
   const unstableProps = [...unstable.entries()]
-    .map(([key, v]) => ({ key, count: v.count, share: v.count / mine.length, valueType: v.valueType }))
+    .map(([key, v]) => ({ key, count: v.count, share: v.count / denominator, valueType: v.valueType }))
     .sort((a, b) => b.count - a.count);
 
-  const top = breakdown[0];
+  // Ranked over updates, for the same reason the shares are.
+  const top = [...reasonCounts.entries()]
+    .filter(([reason]) => reason !== "mount")
+    .map(([reason, count]) => ({ reason, count, share: count / denominator }))
+    .sort((a, b) => b.count - a.count)[0];
   const topProp = unstableProps[0];
   const latest = mine[mine.length - 1] as RenderEvent;
 
@@ -65,30 +87,48 @@ export function explainEvents(component: string, events: RenderEvent[]): Explana
   let confidence: Confidence = "medium";
 
   if (topProp && topProp.share >= 0.5) {
-    headline = `${pct(topProp.share)} of renders followed \`${topProp.key}\` changing by reference while its contents stayed the same.`;
-    nextStep = `Find where \`${topProp.key}\` is created in ${latest.parent?.name ?? "the parent"} and stabilise it${
-      topProp.valueType === "function" ? " (useCallback, or move it out of the component)" : " (useMemo, or pass the primitive fields you use)"
-    }.`;
+    headline = `${pct(topProp.share)} of updates followed \`${topProp.key}\` changing by reference while its contents stayed the same.`;
+    // `parent` is the nearest instrumented ancestor — where the prop arrives
+    // from, which is not necessarily where it is created. Say the former.
+    const via = latest.parent?.name;
+    nextStep =
+      `Trace \`${topProp.key}\` back from ${via ? `${via}, which passes it to ${component}` : component}, ` +
+      `and stabilise it where it is created${
+        topProp.valueType === "function" ? " (useCallback, or hoist it out of the component)" : " (useMemo, or pass the primitive fields you use)"
+      }.`;
     confidence = "high";
   } else if (top && top.reason === "parent" && top.share >= 0.5) {
-    headline = `${pct(top.share)} of renders were parent propagation with identical props.`;
+    headline = `${pct(top.share)} of updates were parent propagation with identical props.`;
     nextStep = `Measure ${component} with React.memo(). It is only worth it if ${fmt(totalSelf / mine.length)} per render matters here.`;
     confidence = "high";
   } else if (top && top.reason === "context") {
-    headline = `${pct(top.share)} of renders followed a tracked context update.`;
+    headline = `${pct(top.share)} of updates followed a tracked context update.`;
     nextStep = "Check whether the provider's value is stable, and whether this component needs the whole context value.";
     confidence = "medium";
   } else if (top && (top.reason === "state" || top.reason === "state-or-external")) {
-    headline = `${pct(top.share)} of renders came from inside the component — state or an external store.`;
+    headline = `${pct(top.share)} of updates came from inside the component — state or an external store.`;
     nextStep =
       top.reason === "state"
         ? "These are real state updates. Check whether every update needs to change state."
         : "Name the state with useTrackedState to see which value drives these renders.";
     confidence = top.reason === "state" ? "high" : "medium";
   } else if (top && top.reason === "props") {
-    headline = `${pct(top.share)} of renders were driven by props with genuinely new values.`;
-    nextStep = "These look like legitimate data changes. Look at render cost rather than render count.";
-    confidence = "high";
+    // Do not call a bucket "new values" without checking that it holds any.
+    if (propsReferenceOnly > propsWithNewValues) {
+      headline = `${pct(propsReferenceOnly / denominator)} of updates were prop changes where only the reference changed — the contents were identical.`;
+      nextStep = `Stabilise the props listed above in whichever component renders ${component}.`;
+      confidence = "high";
+    } else if (propsReferenceOnly > 0) {
+      headline =
+        `${pct(propsWithNewValues / denominator)} of updates carried genuinely new prop values, ` +
+        `and ${pct(propsReferenceOnly / denominator)} changed by reference only.`;
+      nextStep = "The reference-only ones are the avoidable half — start there.";
+      confidence = "high";
+    } else {
+      headline = `${pct(top.share)} of updates were driven by props with genuinely new values.`;
+      nextStep = "These look like legitimate data changes. Look at render cost rather than render count.";
+      confidence = "high";
+    }
   } else {
     headline = "Cause could not be determined reliably.";
     nextStep = "Instrument the parent, or track the context this component consumes, to narrow it down.";
@@ -98,6 +138,7 @@ export function explainEvents(component: string, events: RenderEvent[]): Explana
   return {
     component,
     renders: mine.length,
+    mounts: mine.length - updates.length,
     breakdown,
     unstableProps,
     averageSelfDuration: totalSelf / mine.length,
@@ -115,17 +156,17 @@ export function formatExplanation(e: Explanation): string {
   const lines: string[] = [
     `${e.component}`,
     "",
-    `${e.renders} recorded render${e.renders === 1 ? "" : "s"}`,
+    `${e.renders} recorded render${e.renders === 1 ? "" : "s"}${e.mounts > 0 ? ` (${e.mounts} mount${e.mounts === 1 ? "" : "s"})` : ""}`,
     "",
     "Why?",
     `  ${e.headline}`,
     "",
-    "Breakdown",
+    "Breakdown (share of all renders)",
     ...e.breakdown.map((b) => `  ${b.reason.padEnd(18)} ${String(b.count).padStart(5)}  ${pct(b.share)}`),
   ];
 
   if (e.unstableProps.length > 0) {
-    lines.push("", "Reference-only prop changes");
+    lines.push("", "Reference-only prop changes (share of updates)");
     for (const p of e.unstableProps) {
       lines.push(`  ${p.key.padEnd(18)} ${String(p.count).padStart(5)}  ${pct(p.share)}  (${p.valueType})`);
     }

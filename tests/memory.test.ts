@@ -32,7 +32,7 @@ describe("memory safety", () => {
     expect(stats?.renderCount).toBe(100_000);
   });
 
-  it("releases props as soon as a component detaches", () => {
+  it("stops retaining a component once it detaches", () => {
     init({ enabled: true, mode: "silent" });
     const d = getDetective();
     const node = d.createNode("Temp", undefined);
@@ -43,9 +43,11 @@ describe("memory safety", () => {
     d.flush();
 
     d.detach(node);
-    expect(node.prevProps).toBeUndefined();
-    expect(node.pendingProps).toBeUndefined();
+    // The registry is the only thing holding the node; dropping it there is what
+    // bounds memory. Props are intentionally left intact — StrictMode runs
+    // effect cleanups on components that are still mounted.
     expect(d.getComponentStats("Temp")).toHaveLength(0);
+    expect(d.getEvents().some((e) => e.component.name === "Temp")).toBe(true);
   });
 
   it("does not leak listeners", () => {

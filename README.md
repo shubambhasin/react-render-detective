@@ -221,8 +221,10 @@ Full API: [docs/API.md](docs/API.md).
 ## Safety
 
 - **Nothing leaves your machine.** No network calls, no telemetry, no analytics, no storage.
-- **Production-safe by default.** `detectDev()` defaults to *off* when it cannot tell.
-  With `enabled: false` nothing is registered and no `<Profiler>` is mounted.
+- **Off until you ask.** Importing the package registers nothing. `init()` is the switch, and it
+  turns diagnostics on unless it can positively see `NODE_ENV === "production"` — guard the call so
+  your bundler removes it entirely. With `enabled: false` nothing is registered and no `<Profiler>`
+  is mounted.
 - **Fail-safe.** Every instrumentation path is wrapped: a throwing getter, an exploding subscriber
   or an un-inspectable prop degrades the diagnostic, never your app.
 - **Bounded.** Ring-buffered events, capped inspection depth/width, props released on unmount.

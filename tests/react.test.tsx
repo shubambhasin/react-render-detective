@@ -257,6 +257,44 @@ describe("StrictMode", () => {
   });
 });
 
+describe("StrictMode regression", () => {
+  it("diffs the first update against the real mount props, not an empty object", () => {
+    setup();
+    const Leaf = track("StrictLeaf", function StrictLeaf(_: { item: { id: number }; onPick: () => void }) {
+      return <i>leaf</i>;
+    });
+    const item = { id: 1 };
+    const Host = track("StrictHost", function StrictHost() {
+      const [tick, setTick] = useState(0);
+      const onPick = () => {};
+      return (
+        <div>
+          <button onClick={() => setTick(tick + 1)}>go</button>
+          <Leaf item={item} onPick={onPick} />
+        </div>
+      );
+    });
+
+    const { getByText } = render(
+      <StrictMode>
+        <Host />
+      </StrictMode>,
+    );
+    act(() => void fireEvent.click(getByText("go")));
+
+    const first = eventsFor("StrictLeaf")[1] as RenderEvent;
+    /*
+     * StrictMode runs effect cleanup then the effect again on mount. If that
+     * cleanup discards the recorded props, this first update diffs against {}
+     * and every prop looks newly added — including `item`, which never changed.
+     */
+    expect(first.changedProps.map((c) => c.kind)).not.toContain("added");
+    expect(first.changedProps.map((c) => c.key)).toEqual(["onPick"]);
+    expect(first.changedProps[0]?.kind).toBe("reference");
+    expect(first.unchangedProps).toContain("item");
+  });
+});
+
 describe("integration modes", () => {
   it("useRenderDiagnostics reports causality without a wrapper, and admits it has no timings", () => {
     setup();

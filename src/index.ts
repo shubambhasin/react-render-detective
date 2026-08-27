@@ -27,6 +27,12 @@ export function init(options: DetectiveOptions = {}): void {
 
   if (detective.enabled && detective.config.mode !== "silent") {
     g[REPORTER] = attachConsoleReporter(detective);
+  } else if (!detective.enabled) {
+    // Never fail silently: a disabled detective looks identical to a broken one.
+    console.info(
+      "[RRD] Diagnostics are disabled" +
+        (detective.config.enabled === false ? " (enabled: false, or a production build was detected)." : "."),
+    );
   }
 }
 

@@ -114,9 +114,16 @@ Same as Next: initialise from a client-only effect in `root.tsx`, guarded on
 
 ## Other bundlers
 
-Rspack, Parcel and esbuild all handle a `process.env.NODE_ENV` guard. If your setup defines
-nothing, `detectDev()` returns **false** and the package stays off — the safe default. Pass
-`enabled` explicitly if you need to override that.
+Rspack, Parcel and esbuild all handle a `process.env.NODE_ENV` guard.
+
+Nothing is registered until you call `init()`. That call means "turn it on", so `enabled` defaults
+to true unless a production build is **positively detected** (`NODE_ENV === "production"`). The
+asymmetry is deliberate: in a Vite dev server there is no `process` in the browser at all, and the
+earlier "is this dev?" test answered *no*, which meant the documented quick-start switched the tool
+on and then silently recorded nothing. Production safety is the guard around the call — which is
+also what lets a bundler drop the package entirely.
+
+If `init()` ends up disabled it says so once on the console rather than going quiet.
 
 ---
 

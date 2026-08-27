@@ -47,7 +47,7 @@ const Navbar = withRenderDetective(function Navbar({ onOpenModal }: { onOpenModa
       <span className="user">{user.name}</span>
     </header>
   );
-});
+}, { name: "Navbar" });
 
 const Sidebar = withRenderDetective(function Sidebar({ active }: { active: string }) {
   const items = ["Overview", "Products", "Orders", "Customers", "Settings"];
@@ -60,7 +60,7 @@ const Sidebar = withRenderDetective(function Sidebar({ active }: { active: strin
       ))}
     </nav>
   );
-});
+}, { name: "Sidebar" });
 
 /**
  * PROBLEM 2 — expensive component with no memoization.
@@ -85,7 +85,7 @@ const Chart = withRenderDetective(function Chart({ rows }: { rows: Product[] }) 
       ))}
     </section>
   );
-});
+}, { name: "Chart" });
 
 const TableRow = memo(
   withRenderDetective(function TableRow({
@@ -104,7 +104,7 @@ const TableRow = memo(
         <td>{product.updatedAt}</td>
       </tr>
     );
-  }),
+  }, { name: "TableRow" }),
 );
 
 /**
@@ -140,7 +140,7 @@ const ProductTable = withRenderDetective(function ProductTable({
       </tbody>
     </table>
   );
-});
+}, { name: "ProductTable" });
 
 const Filters = withRenderDetective(function Filters({
   query,
@@ -163,7 +163,7 @@ const Filters = withRenderDetective(function Filters({
       </select>
     </div>
   );
-});
+}, { name: "Filters" });
 
 const Pagination = withRenderDetective(function Pagination({
   page,
@@ -187,7 +187,7 @@ const Pagination = withRenderDetective(function Pagination({
       </button>
     </div>
   );
-});
+}, { name: "Pagination" });
 
 function Modal({ open, onClose }: { open: boolean; onClose: () => void }) {
   if (!open) return null;
@@ -233,7 +233,7 @@ const Dashboard = withRenderDetective(function Dashboard() {
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} />
     </div>
   );
-});
+}, { name: "Dashboard" });
 
 /* ------------------------------------------------------- the fixed version */
 
@@ -263,7 +263,7 @@ const FixedDashboard = withRenderDetective(function FixedDashboard() {
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} />
     </div>
   );
-});
+}, { name: "FixedDashboard" });
 
 export function App() {
   const [fixed, setFixed] = useState(false);

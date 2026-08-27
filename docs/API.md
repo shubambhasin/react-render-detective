@@ -11,6 +11,11 @@ optional inspector.
 Enables diagnostics and attaches the console reporter. **Idempotent** — calling it again
 reconfigures the single instance and re-attaches exactly one reporter.
 
+`enabled` defaults to `true` unless `NODE_ENV === "production"` is positively detected: calling
+`init()` *is* the intent to turn diagnostics on. Nothing is registered before that call, so
+importing the package costs nothing. If the result is disabled, one line is logged to the console
+so a disabled detective never looks like a broken one.
+
 ```ts
 init({ enabled: process.env.NODE_ENV !== "production", mode: "console" });
 ```
