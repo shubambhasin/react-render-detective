@@ -39,10 +39,17 @@ npm version patch          # or minor / major
 # 2. Sync the version strings npm does not know about, and write the changelog.
 #    README status line · site/index.html status line · a new CHANGELOG section.
 
-# 3. Verify locally exactly as CI will.
+# 3. Sanity-check before committing (every tarball check runs; only the
+#    "manifest matches HEAD" check is relaxed, and it still fails on keys npm
+#    added behind your back).
+npm run verify -- --allow-dirty
+
+# 4. Commit, then verify strictly — this is what CI will do.
+git add -A && git commit -m "Release vX.Y.Z"
 npm run verify
 
-# 4. Push. The tag is what triggers the release.
+# 5. Tag and push. The tag is what triggers the release.
+git tag -a vX.Y.Z -m "X.Y.Z"
 git push --follow-tags origin main
 ```
 
@@ -67,7 +74,7 @@ Step 7 is the backstop: it checks what actually landed, not what was meant to la
 
 | check | the failure it exists for |
 | --- | --- |
-| `package.json` matches `HEAD` | npm rewriting the manifest under you — this is what shipped 0.1.1 |
+| `package.json` matches `HEAD` | npm rewriting the manifest under you — this is what shipped 0.1.1 **and** 0.1.2 |
 | zero runtime dependencies | the same defect, seen from the tarball side |
 | `peerDependencies` is exactly `react` | an accidental peer breaks every install |
 | tarball version matches the manifest | publishing a stale build |

@@ -1,8 +1,29 @@
 # Changelog
 
+## 0.1.3
+
+**Use this version.** It is the first release published by CI from a clean checkout, and the first
+whose metadata is correct.
+
+`0.1.0`, `0.1.1` and `0.1.2` were all published from a local working tree, and none of them should
+be used:
+
+| version | problem |
+| --- | --- |
+| `0.1.0` | predates four render-attribution defects found by running the demo in a real browser |
+| `0.1.1` | `package.json` declares ~200 transitive dev packages as runtime dependencies; fails to install on Linux |
+| `0.1.2` | same defect, 122 dependencies — published from the polluted tree before the guard existed |
+
+The cause was npm silently rewriting `package.json` while reifying a `node_modules` tree left out
+of sync by an earlier `--no-save` install. It happened three times, from three different npm
+commands, which is why releases no longer come from a local tree at all. See
+[docs/RELEASING.md](docs/RELEASING.md).
+
+Code is unchanged from `0.1.2`; only the release path and metadata differ.
+
 ## 0.1.2
 
-**Use this version.** `0.1.1` shipped a broken `package.json`: a stray
+Withdrawn — 122 spurious runtime dependencies. `0.1.1` shipped a broken `package.json`: a stray
 `npm install --package-lock-only` had written a `dependencies` block into it listing ~200
 transitive dev packages as runtime dependencies of this package. Installing `0.1.1` therefore
 pulls in the whole dev toolchain, and fails outright on Linux because the darwin-only `fsevents`

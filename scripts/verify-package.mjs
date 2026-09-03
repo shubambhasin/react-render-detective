@@ -37,6 +37,15 @@ const FORBIDDEN = [/^package\/(src|tests|bench|examples|site|scripts|docs)\//, /
 const failures = [];
 const fail = (message) => failures.push(message);
 
+/*
+ * `--allow-dirty` downgrades the "manifest matches HEAD" check to a warning, so
+ * a release can be sanity-checked before the version bump is committed. Every
+ * tarball check still runs. `prepublishOnly` never passes it, so a real publish
+ * is always strict — which is the case that matters, since publishing an
+ * uncommitted manifest is what shipped 0.1.1 and 0.1.2.
+ */
+const allowDirty = process.argv.includes("--allow-dirty");
+
 // fileURLToPath, not `.pathname`: the latter percent-encodes spaces in the path.
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
@@ -53,11 +62,17 @@ try {
     const committed = JSON.parse(git("show", "HEAD:package.json"));
     const working = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
     const added = Object.keys(working).filter((k) => !(k in committed));
-    fail(
+    const detail =
       "package.json has uncommitted changes; publish only what is committed.\n" +
-        (added.length ? `      Keys npm appears to have added: ${added.join(", ")}\n` : "") +
-        "      Run `git diff package.json`, then `git checkout package.json` if npm wrote it.",
-    );
+      (added.length ? `      Keys npm appears to have added: ${added.join(", ")}\n` : "") +
+      "      Run `git diff package.json`, then `git checkout package.json` if npm wrote it.";
+    if (allowDirty) {
+      // Still shout about keys npm added — that is never an intentional edit.
+      if (added.length > 0) fail(detail);
+      else console.warn(`Warning: ${detail.split("\n")[0]} (allowed by --allow-dirty)`);
+    } else {
+      fail(detail);
+    }
   }
 } catch {
   // Not a git checkout (e.g. publishing from an extracted tarball) — skip.
