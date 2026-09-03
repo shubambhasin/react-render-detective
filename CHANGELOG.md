@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.2.0
+
+### Added — automatic instrumentation
+
+A build-time transform that instruments every component in development, shipped as a Babel plugin
+(`react-render-detective/babel`) and a Vite plugin (`react-render-detective/vite`) that share one
+implementation.
+
+Wrapping components by hand only ever finds problems you already suspected. This turns the tool
+from a probe into a scanner, and it is also the only way to get **source locations** — React
+removed `_debugSource` in 19, so there is no runtime alternative. Diagnoses now read
+`TableRow   src/App.tsx:85:7`, and fix instructions name the file and line of the component that
+passes the unstable prop.
+
+- Instruments uppercase-named functions returning JSX, including arrow components and the function
+  inside `memo()` / `forwardRef()` — *inside*, so `memo` still compares props first.
+- Function declarations are instrumented by reassignment rather than rewritten to `const`, since
+  components are routinely used above their definition and a `const` would produce a temporal dead
+  zone error.
+- Leaves alone: hooks, lowercase functions, functions that never return JSX, JSX from a nested
+  closure, hand-wrapped components, `node_modules`, and the detective's own runtime.
+- `clientOnly` skips files without a `"use client"` directive, for the Next.js app router.
+- `@babel/core` is an **optional** peer dependency and never reaches the browser; the runtime keeps
+  its zero-dependency guarantee, and the size gate now fails if build-time code leaks into a
+  runtime entry.
+
+### Fixed
+
+- `withRenderDetective` returns an already-wrapped component unchanged instead of nesting. Found by
+  running the plugin against this repo's own example: it instrumented the detective's runtime, the
+  wrapper rendered itself, and the app died with a stack overflow before first paint. The plugin
+  now refuses to touch its own runtime, and the HOC refuses to wrap a wrapper.
+
 ## 0.1.3
 
 **Use this version.** It is the first release published by CI from a clean checkout, and the first

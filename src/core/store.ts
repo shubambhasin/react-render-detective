@@ -35,6 +35,8 @@ const SWEEP_DELAY_MS = 250;
 interface NodeRecord {
   id: string;
   name: string;
+  /** `File.tsx:12:2` when the build plugin instrumented this component. */
+  source?: string;
   /** Nearest instrumented ancestor, held directly so diagnosis never needs the registry. */
   parent?: NodeRecord;
   depth: number;
@@ -161,12 +163,13 @@ export class Detective {
    * discards one of the two, and only the surviving fiber's effect attaches —
    * so discarded nodes are simply garbage collected.
    */
-  createNode(name: string, parent: NodeRecord | undefined): NodeRecord | undefined {
+  createNode(name: string, parent: NodeRecord | undefined, source?: string): NodeRecord | undefined {
     if (!shouldInstrument(name, this.config)) return undefined;
     const sampled = this.config.samplingRate >= 1 || Math.random() < this.config.samplingRate;
     const node: NodeRecord = {
       id: `rrd_${++this.nextId}`,
       name,
+      source,
       parent,
       depth: parent ? parent.depth + 1 : 0,
       sampled,
@@ -431,6 +434,7 @@ export class Detective {
     const componentInfo: ComponentInfo = {
       id: node.id,
       name: node.name,
+      source: node.source,
       parentId: parent?.id,
       depth: node.depth,
     };
@@ -451,7 +455,9 @@ export class Detective {
       },
       changedProps: changed,
       unchangedProps: unchanged,
-      parent: parent ? { id: parent.id, name: parent.name, parentId: parent.parent?.id, depth: parent.depth } : undefined,
+      parent: parent
+        ? { id: parent.id, name: parent.name, source: parent.source, parentId: parent.parent?.id, depth: parent.depth }
+        : undefined,
       parentRendered,
       selfOriginated: propsReevaluated === false,
       contextChanges: relevantContexts,
@@ -585,6 +591,7 @@ function toStats(node: NodeRecord): ComponentStats {
   return {
     id: node.id,
     name: node.name,
+    source: node.source,
     renderCount: s.renderCount,
     mountCount: s.mountCount,
     uncommittedAttempts: s.uncommittedAttempts,
@@ -609,6 +616,7 @@ function mergeStats(a: ComponentStats, b: ComponentStats): ComponentStats {
   return {
     id: a.id,
     name: a.name,
+    source: a.source ?? b.source,
     renderCount,
     mountCount: a.mountCount + b.mountCount,
     uncommittedAttempts: a.uncommittedAttempts + b.uncommittedAttempts,

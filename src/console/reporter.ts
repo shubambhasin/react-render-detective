@@ -48,8 +48,12 @@ function printVerbose(event: RenderEvent): void {
   group.call(console, header);
   try {
     console.log(`Cause:       ${label(event)} (confidence: ${diagnosis.confidence})`);
+    if (event.component.source) console.log(`Source:      ${event.component.source}`);
     if (event.parent) {
-      console.log(`Parent:      ${event.parent.name}${event.parentRendered ? " (re-rendered in this commit)" : " (did not re-render)"}`);
+      console.log(
+        `Parent:      ${event.parent.name}${event.parent.source ? ` (${event.parent.source})` : ""}` +
+          `${event.parentRendered ? " — re-rendered in this commit" : " — did not re-render"}`,
+      );
     }
     console.log(
       `Cost:        self ${timings.selfDuration.toFixed(1)}ms · subtree ${timings.subtreeDuration.toFixed(1)}ms` +

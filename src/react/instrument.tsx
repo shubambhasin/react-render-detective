@@ -8,6 +8,11 @@ import { AncestryContext } from "./ancestry.js";
 export interface TrackOptions {
   /** Overrides the inferred component name. Required for anonymous components. */
   name?: string;
+  /**
+   * `path/to/File.tsx:12:2`. Supplied automatically by the build plugin; there
+   * is no runtime way to obtain it.
+   */
+  source?: string;
 }
 
 /**
@@ -17,6 +22,7 @@ export interface TrackOptions {
 export function useInstrumentedNode(
   name: string,
   props: Record<string, unknown>,
+  source?: string,
 ): { node: NodeRecord | undefined; onRender: ProfilerOnRenderCallback } {
   const detective = getDetective();
   const parent = useContext(AncestryContext);
@@ -24,7 +30,7 @@ export function useInstrumentedNode(
   // The active/inactive decision is frozen per instance so the element tree
   // shape never changes underneath a mounted component.
   const [node] = useState<NodeRecord | undefined>(() =>
-    detective.enabled ? detective.createNode(name, parent) : undefined,
+    detective.enabled ? detective.createNode(name, parent, source) : undefined,
   );
 
   useLayoutEffect(() => {

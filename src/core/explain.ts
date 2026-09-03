@@ -2,6 +2,10 @@ import type { Confidence, RenderEvent, RenderReason } from "./types.js";
 
 export interface Explanation {
   component: string;
+  /** `File.tsx:12:2`, when the build plugin instrumented this component. */
+  source?: string;
+  /** Where the component's props come from, and its source if known. */
+  parent?: { name: string; source?: string };
   renders: number;
   /** Mounts are excluded from every share below — they cannot be optimised away. */
   mounts: number;
@@ -91,8 +95,9 @@ export function explainEvents(component: string, events: RenderEvent[]): Explana
     // `parent` is the nearest instrumented ancestor — where the prop arrives
     // from, which is not necessarily where it is created. Say the former.
     const via = latest.parent?.name;
+    const viaSource = latest.parent?.source ? ` (${latest.parent.source})` : "";
     nextStep =
-      `Trace \`${topProp.key}\` back from ${via ? `${via}, which passes it to ${component}` : component}, ` +
+      `Trace \`${topProp.key}\` back from ${via ? `${via}${viaSource}, which passes it to ${component}` : component}, ` +
       `and stabilise it where it is created${
         topProp.valueType === "function" ? " (useCallback, or hoist it out of the component)" : " (useMemo, or pass the primitive fields you use)"
       }.`;
@@ -137,6 +142,8 @@ export function explainEvents(component: string, events: RenderEvent[]): Explana
 
   return {
     component,
+    source: latest.component.source,
+    parent: latest.parent ? { name: latest.parent.name, source: latest.parent.source } : undefined,
     renders: mine.length,
     mounts: mine.length - updates.length,
     breakdown,
@@ -154,7 +161,7 @@ export function explainEvents(component: string, events: RenderEvent[]): Explana
 
 export function formatExplanation(e: Explanation): string {
   const lines: string[] = [
-    `${e.component}`,
+    e.source ? `${e.component}   ${e.source}` : `${e.component}`,
     "",
     `${e.renders} recorded render${e.renders === 1 ? "" : "s"}${e.mounts > 0 ? ` (${e.mounts} mount${e.mounts === 1 ? "" : "s"})` : ""}`,
     "",

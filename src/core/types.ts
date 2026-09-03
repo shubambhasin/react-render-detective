@@ -79,6 +79,12 @@ export interface ComponentInfo {
   /** Stable per mounted instance. */
   id: string;
   name: string;
+  /**
+   * `path/to/File.tsx:12:2`, supplied by the build plugin. React exposes no
+   * source location at runtime — `_debugSource` was removed in React 19 — so
+   * this is present only for components instrumented at build time.
+   */
+  source?: string;
   /** Nearest *instrumented* ancestor — not necessarily the direct parent element. */
   parentId?: string;
   depth: number;
@@ -161,6 +167,7 @@ export interface ContextChange {
 export interface ComponentStats {
   id: string;
   name: string;
+  source?: string;
   renderCount: number;
   mountCount: number;
   uncommittedAttempts: number;

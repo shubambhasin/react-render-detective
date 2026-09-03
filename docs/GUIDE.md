@@ -41,6 +41,73 @@ Target: useful output in under five minutes without reading the rest of this pag
 
 ---
 
+## Automatic instrumentation (recommended)
+
+Wrapping components by hand only tells you about components you already suspected. The build plugin
+instruments **every** component in development, and attaches a real source location — which React
+itself cannot provide at runtime, since `_debugSource` was removed in React 19.
+
+### Vite
+
+```ts
+// vite.config.ts
+import react from "@vitejs/plugin-react";
+import { renderDetective } from "react-render-detective/vite";
+
+export default defineConfig({
+  plugins: [renderDetective(), react()],   // renderDetective first
+});
+```
+
+It only applies to `vite serve`, so a production build never sees it.
+
+### Babel — Next.js, webpack, Remix, CRA
+
+```json
+// .babelrc  (or babel.config.js)
+{
+  "plugins": ["react-render-detective/babel"]
+}
+```
+
+For the **Next.js app router**, enable `clientOnly` so server components are left alone — they
+never render on the client, and wrapping one in a hook-using HOC breaks the build:
+
+```json
+{ "plugins": [["react-render-detective/babel", { "clientOnly": true }]] }
+```
+
+Note that adding a Babel config to a Next project opts it out of SWC, which slows compilation. If
+that matters more than whole-app coverage, instrument by hand instead.
+
+### Options
+
+| option | default | meaning |
+| --- | --- | --- |
+| `enabled` | `NODE_ENV !== "production"` | the plugin removes itself otherwise |
+| `include` | all files | strings or regexes matched against the file path |
+| `exclude` | none | applied after `include` |
+| `clientOnly` | `false` | skip files without a `"use client"` directive |
+| `importSource` | `"react-render-detective"` | where the runtime is imported from |
+| `root` | `process.cwd()` | base for relative source locations |
+
+`@babel/core` is an optional peer dependency. Vite's React plugin already provides it; otherwise
+`npm i -D @babel/core`. None of it reaches the browser — the runtime keeps its zero-dependency
+guarantee.
+
+### What it does and does not touch
+
+Instrumented: uppercase-named functions that return JSX, including arrow components and the
+function inside `memo()` / `forwardRef()` — inside, so `memo` keeps comparing props before the
+instrumentation runs.
+
+Left alone: hooks and lowercase functions, functions that never return JSX, JSX returned from a
+nested closure, anything already wrapped by hand, `node_modules`, and the detective's own runtime.
+
+Function declarations are instrumented by reassignment rather than being rewritten to `const`,
+because components are routinely used above their definition and a `const` would turn that into a
+temporal dead zone error.
+
 ## Vite
 
 ```tsx

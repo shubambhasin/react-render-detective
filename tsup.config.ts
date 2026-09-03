@@ -5,6 +5,8 @@ export default defineConfig({
     index: "src/index.ts",
     core: "src/core/index.ts",
     overlay: "src/overlay/index.ts",
+    babel: "src/babel/index.ts",
+    vite: "src/vite/index.ts",
   },
   format: ["esm", "cjs"],
   dts: true,
@@ -13,5 +15,5 @@ export default defineConfig({
   splitting: true,
   sourcemap: true,
   target: "es2020",
-  external: ["react", "react-dom"],
+  external: ["react", "react-dom", "@babel/core"],
 });

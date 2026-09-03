@@ -42,6 +42,16 @@ modal, verified in Chrome:
 `memo` on `TableRow` only starts working once `onSelect` stops being recreated — which is exactly
 what the tool points at.
 
+## No manual instrumentation
+
+This app contains **zero** `withRenderDetective` calls. `vite.config.ts` enables the build plugin,
+which instruments every component and attaches source locations:
+
+```text
+TableRow   src/App.tsx:85:7
+Next step  Trace `onSelect` back from ProductTable (src/App.tsx:110:1) …
+```
+
 ## Note on this example's imports
 
 `vite.config.ts` aliases `react-render-detective` to the package source so edits show up

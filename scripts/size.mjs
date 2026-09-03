@@ -26,6 +26,13 @@ const BUDGETS = {
   total: 20 * 1024,
 };
 
+/**
+ * Build-time only: these run in the bundler, never in the browser, so they are
+ * reported but not budgeted. What *is* enforced is that they never leak into a
+ * runtime entry — see the contamination check below.
+ */
+const BUILD_TIME_ENTRIES = ["babel", "vite"];
+
 function bytesFor(entry) {
   // An entry's real cost is its own chunk plus the shared chunks it imports.
   const seen = new Set();
@@ -71,6 +78,22 @@ for (const entry of entries) {
   console.log(
     `${ok ? "PASS" : "FAIL"}  ${entry.padEnd(8)} ${kb(r.gzip).padStart(8)} gzip  ${kb(r.min).padStart(9)} min   budget ${kb(budget)}`,
   );
+}
+
+// A runtime entry that reaches the Babel plugin would ship a compiler to the
+// browser. Assert the separation rather than trusting the config.
+for (const entry of entries) {
+  const { files } = bytesFor(entry);
+  const leaked = files.filter((f) => /babel|vite/.test(f));
+  if (leaked.length > 0) {
+    console.log(`FAIL  ${entry} pulls in build-time code: ${leaked.join(", ")}`);
+    failed = true;
+  }
+}
+
+for (const entry of BUILD_TIME_ENTRIES) {
+  const r = bytesFor(entry);
+  console.log(`      ${entry.padEnd(8)} ${kb(r.gzip).padStart(8)} gzip  ${kb(r.min).padStart(9)} min   build-time only, not budgeted`);
 }
 
 const totalRaw = minified([...allFiles]);

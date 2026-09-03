@@ -33,6 +33,15 @@ Changes configuration without touching the reporter.
 
 Full teardown: detaches the reporter, drops every node, listener and event, restores defaults.
 
+## Build-time instrumentation
+
+### `react-render-detective/vite` → `renderDetective(options?)`
+### `react-render-detective/babel` → Babel plugin
+
+Instrument every component in a file at build time, with source locations. See
+[GUIDE.md](GUIDE.md#automatic-instrumentation-recommended) for setup and the full option table.
+Both share one transform, so every bundler behaves identically.
+
 ## Instrumentation
 
 ### `withRenderDetective(Component, options?): ComponentType`
@@ -40,6 +49,10 @@ Full teardown: detaches the reporter, drops every node, listener and event, rest
 | option | type | meaning |
 | --- | --- | --- |
 | `name` | `string` | overrides the inferred name. Required for anonymous components, and recommended anywhere a bundler might rename duplicates. |
+| `source` | `string` | `File.tsx:12:2`. Supplied by the build plugin; there is no runtime way to obtain it. |
+
+Wrapping an already-wrapped component returns it unchanged rather than nesting — a wrapper
+rendering itself would overflow the stack before first paint.
 
 Most accurate mode: per-prop diffing, parent attribution, Profiler timings.
 

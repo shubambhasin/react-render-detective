@@ -1,10 +1,5 @@
 import { createContext, memo, useCallback, useContext, useMemo, useState } from "react";
-import {
-  RenderDetective,
-  useTrackedContextValue,
-  useTrackedState,
-  withRenderDetective,
-} from "react-render-detective";
+import { useTrackedContextValue, useTrackedState } from "react-render-detective";
 import { CATEGORIES, queryProducts, type Product } from "./data";
 
 /* ------------------------------------------------------------------ context */
@@ -36,7 +31,7 @@ function SessionProvider({ children }: { children: React.ReactNode }) {
 
 /* ------------------------------------------------------------------- pieces */
 
-const Navbar = withRenderDetective(function Navbar({ onOpenModal }: { onOpenModal: () => void }) {
+function Navbar({ onOpenModal }: { onOpenModal: () => void }) {
   const { user, theme, toggleTheme } = useSession();
   return (
     <header className="navbar">
@@ -47,9 +42,9 @@ const Navbar = withRenderDetective(function Navbar({ onOpenModal }: { onOpenModa
       <span className="user">{user.name}</span>
     </header>
   );
-}, { name: "Navbar" });
+}
 
-const Sidebar = withRenderDetective(function Sidebar({ active }: { active: string }) {
+function Sidebar({ active }: { active: string }) {
   const items = ["Overview", "Products", "Orders", "Customers", "Settings"];
   return (
     <nav className="sidebar">
@@ -60,13 +55,13 @@ const Sidebar = withRenderDetective(function Sidebar({ active }: { active: strin
       ))}
     </nav>
   );
-}, { name: "Sidebar" });
+}
 
 /**
  * PROBLEM 2 — expensive component with no memoization.
  * Chart re-renders whenever Dashboard does, and each render costs real time.
  */
-const Chart = withRenderDetective(function Chart({ rows }: { rows: Product[] }) {
+function Chart({ rows }: { rows: Product[] }) {
   const buckets = new Map<string, number>();
   for (const row of rows) {
     // Deliberately wasteful, to make the cost visible in the timings.
@@ -85,10 +80,10 @@ const Chart = withRenderDetective(function Chart({ rows }: { rows: Product[] }) 
       ))}
     </section>
   );
-}, { name: "Chart" });
+}
 
 const TableRow = memo(
-  withRenderDetective(function TableRow({
+  function TableRow({
     product,
     onSelect,
   }: {
@@ -104,7 +99,7 @@ const TableRow = memo(
         <td>{product.updatedAt}</td>
       </tr>
     );
-  }, { name: "TableRow" }),
+  },
 );
 
 /**
@@ -112,7 +107,7 @@ const TableRow = memo(
  * `onSelect` is recreated by ProductTable on every render, so `memo` on
  * TableRow never gets a chance to skip anything.
  */
-const ProductTable = withRenderDetective(function ProductTable({
+function ProductTable({
   rows,
   page,
   onSelect,
@@ -140,9 +135,9 @@ const ProductTable = withRenderDetective(function ProductTable({
       </tbody>
     </table>
   );
-}, { name: "ProductTable" });
+}
 
-const Filters = withRenderDetective(function Filters({
+function Filters({
   query,
   category,
   onQuery,
@@ -163,9 +158,9 @@ const Filters = withRenderDetective(function Filters({
       </select>
     </div>
   );
-}, { name: "Filters" });
+}
 
-const Pagination = withRenderDetective(function Pagination({
+function Pagination({
   page,
   pages,
   onPage,
@@ -187,7 +182,7 @@ const Pagination = withRenderDetective(function Pagination({
       </button>
     </div>
   );
-}, { name: "Pagination" });
+}
 
 function Modal({ open, onClose }: { open: boolean; onClose: () => void }) {
   if (!open) return null;
@@ -204,7 +199,7 @@ function Modal({ open, onClose }: { open: boolean; onClose: () => void }) {
 
 /* ---------------------------------------------------------------- dashboard */
 
-const Dashboard = withRenderDetective(function Dashboard() {
+function Dashboard() {
   const [query, setQuery] = useTrackedState("query", "");
   const [category, setCategory] = useTrackedState("category", "All");
   const [page, setPage] = useTrackedState("page", 0);
@@ -233,11 +228,11 @@ const Dashboard = withRenderDetective(function Dashboard() {
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} />
     </div>
   );
-}, { name: "Dashboard" });
+}
 
 /* ------------------------------------------------------- the fixed version */
 
-const FixedDashboard = withRenderDetective(function FixedDashboard() {
+function FixedDashboard() {
   const [query, setQuery] = useTrackedState("query", "");
   const [category, setCategory] = useTrackedState("category", "All");
   const [page, setPage] = useTrackedState("page", 0);
@@ -263,7 +258,7 @@ const FixedDashboard = withRenderDetective(function FixedDashboard() {
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} />
     </div>
   );
-}, { name: "FixedDashboard" });
+}
 
 export function App() {
   const [fixed, setFixed] = useState(false);
@@ -278,9 +273,7 @@ export function App() {
           </span>
           <button onClick={() => setFixed((f) => !f)}>Show {fixed ? "broken" : "fixed"} version</button>
         </div>
-        <RenderDetective name="DashboardRoot">
-          {fixed ? <FixedDashboard /> : <Dashboard />}
-        </RenderDetective>
+        {fixed ? <FixedDashboard /> : <Dashboard />}
       </div>
     </SessionProvider>
   );

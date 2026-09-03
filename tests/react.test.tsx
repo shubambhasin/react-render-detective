@@ -468,3 +468,18 @@ describe("tracked state ownership", () => {
     expect(event?.diagnosis.evidence.join(" ")).toContain("uninstrumented descendant");
   });
 });
+
+describe("double wrapping", () => {
+  it("returns the existing wrapper instead of nesting one inside itself", () => {
+    setup();
+    const Once = track("DoubleWrapped", function DoubleWrapped() {
+      return <i>x</i>;
+    });
+    const Twice = withRenderDetective(Once, { name: "DoubleWrapped" });
+    expect(Twice).toBe(Once);
+
+    // The real failure this prevents: a wrapper rendering itself forever.
+    expect(() => render(<Twice />)).not.toThrow();
+    expect(eventsFor("DoubleWrapped")).toHaveLength(1);
+  });
+});

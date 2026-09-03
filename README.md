@@ -11,7 +11,7 @@
 [Guide](docs/GUIDE.md) · [API](docs/API.md) · [Feasibility report](docs/FEASIBILITY.md) ·
 [Benchmarks](docs/BENCHMARKS.md)
 
-> **Status: 0.1.3, early release.** 76 tests pass on React 18 and 19; benchmarks and bundle budgets
+> **Status: 0.2.0, early release.** 76 tests pass on React 18 and 19; benchmarks and bundle budgets
 > are green; the packed package is verified in a clean install for ESM, CJS and TypeScript
 > consumers; and the demo dashboard has been driven end to end in Chrome, which found four real
 > defects the jsdom suite had missed (see the [changelog](CHANGELOG.md)). Not yet exercised:
@@ -134,6 +134,32 @@ Three rules it holds to, which most render-debugging advice does not:
    replays and excluded from every statistic.
 
 ---
+
+## Automatic instrumentation
+
+Wrapping by hand only finds problems you already suspected. One line instruments the whole app and
+adds source locations:
+
+```ts
+// vite.config.ts
+import { renderDetective } from "react-render-detective/vite";
+export default defineConfig({ plugins: [renderDetective(), react()] });
+```
+
+```text
+TableRow   src/App.tsx:85:7
+
+Why?
+  100% of updates followed `onSelect` changing by reference while its contents stayed the same.
+
+Next step
+  Trace `onSelect` back from ProductTable (src/App.tsx:110:1), which passes it to TableRow,
+  and stabilise it where it is created (useCallback, or hoist it out of the component).
+```
+
+Babel is supported too, for Next.js, webpack and Remix — see the
+[guide](docs/GUIDE.md#automatic-instrumentation-recommended). Dev-only; it removes itself from
+production builds.
 
 ## Integration modes
 
@@ -265,8 +291,8 @@ The headlines:
   `state-or-external` — we say we cannot tell which, rather than guessing.
 - **`useTrackedState` must be called in an instrumented component.** A hook cannot see its own
   caller, only the nearest instrumented ancestor.
-- **Source locations** need a build-time transform (`_debugSource` was removed in React 19), so
-  they are not in v1.
+- **Source locations** come from the build plugin. Without it there is no runtime way to get them —
+  `_debugSource` was removed in React 19.
 - **Self duration** is an upper bound: React exposes subtree time, and we subtract the instrumented
   descendants we know about.
 

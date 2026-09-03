@@ -101,7 +101,7 @@ export function mountOverlay(): OverlayHandle {
       .map((s) => {
         const waste = s.potentiallyAvoidableRenders;
         const flag = waste > 0 ? `<span class="warn">${waste} avoidable</span>` : "";
-        return `<div class="row${s.name === selected ? " sel" : ""}" data-name="${escapeHtml(s.name)}">
+        return `<div class="row${s.name === selected ? " sel" : ""}" data-name="${escapeHtml(s.name)}" title="${escapeHtml(s.source ?? s.name)}">
           <span class="name">${escapeHtml(s.name)}</span>
           <span class="num">${s.renderCount}</span>
           <span class="num">${s.totalSelfDuration.toFixed(0)}ms</span>

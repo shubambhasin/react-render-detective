@@ -20,7 +20,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ALLOWED_PEERS = ["react"];
+// @babel/core is an optional peer, needed only by the build-time plugin.
+const ALLOWED_PEERS = ["react", "@babel/core"];
 const REQUIRED_FILES = [
   "package/package.json",
   "package/README.md",
@@ -30,6 +31,9 @@ const REQUIRED_FILES = [
   "package/dist/index.d.ts",
   "package/dist/core.js",
   "package/dist/overlay.js",
+  "package/dist/babel.js",
+  "package/dist/babel.cjs",
+  "package/dist/vite.js",
 ];
 /** Anything matching these must never reach the registry. */
 const FORBIDDEN = [/^package\/(src|tests|bench|examples|site|scripts|docs)\//, /\.env/, /\.tgz$/, /node_modules/];
@@ -105,6 +109,9 @@ try {
   const unexpected = peers.filter((p) => !ALLOWED_PEERS.includes(p));
   if (unexpected.length > 0) fail(`unexpected peerDependencies: ${unexpected.join(", ")}`);
   if (!peers.includes("react")) fail("react is missing from peerDependencies");
+  if (manifest.peerDependenciesMeta?.["@babel/core"]?.optional !== true) {
+    fail("@babel/core must be an *optional* peer — it is only needed for build-time instrumentation");
+  }
 
   // 4. The tarball must match the tree it claims to come from.
   if (manifest.version !== local.version) {

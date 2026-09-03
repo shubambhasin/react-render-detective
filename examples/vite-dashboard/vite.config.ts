@@ -1,18 +1,26 @@
 import react from "@vitejs/plugin-react";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
+import { renderDetective } from "../../src/vite/index.js";
 
-const src = (file: string) => new URL(`../../src/${file}`, import.meta.url).pathname;
+// fileURLToPath, not `.pathname`: the latter percent-encodes spaces in the path.
+const src = (file: string) => fileURLToPath(new URL(`../../src/${file}`, import.meta.url));
 
 export default defineConfig({
-  plugins: [react()],
-  resolve: {
+  plugins: [
     /*
-     * The example consumes the package from source so `npm run dev` picks up
-     * edits. Array form with anchored patterns, not the object form: object
-     * aliases match by *prefix*, which would rewrite the `/overlay` subpath to
-     * `src/index.ts/overlay`. A real app just installs the package and needs
-     * none of this.
+     * Automatic instrumentation. Every component in this app is tracked without
+     * a single manual wrapper, and each diagnosis carries a source location.
+     *
+     * `importSource` points at the local source only because this example lives
+     * inside the repo. A real app omits it and the package name is used.
      */
+    renderDetective({ importSource: src("index.ts") }),
+    react(),
+  ],
+  resolve: {
+    // Array form with anchored patterns, not the object form: object aliases
+    // match by prefix, which would rewrite the `/overlay` subpath.
     alias: [
       { find: /^react-render-detective\/overlay$/, replacement: src("overlay/index.ts") },
       { find: /^react-render-detective\/core$/, replacement: src("core/index.ts") },
