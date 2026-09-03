@@ -28,7 +28,7 @@ const DEFAULT_FILTER = (id: string): boolean =>
 
 export function renderDetective(options: VitePluginOptions = {}): MinimalVitePlugin {
   const filter = options.filter ?? DEFAULT_FILTER;
-  let babel: typeof import("@babel/core") | undefined;
+  let transformAsync: typeof import("@babel/core").transformAsync | undefined;
 
   return {
     name: "react-render-detective",
@@ -42,10 +42,19 @@ export function renderDetective(options: VitePluginOptions = {}): MinimalVitePlu
       // Cheap bail-out: no JSX, nothing to instrument.
       if (!code.includes("<")) return null;
 
-      if (!babel) {
+      if (!transformAsync) {
         try {
-          babel = await import("@babel/core");
+          // Babel 8 is ESM with named exports; Babel 7 is CJS and may arrive
+          // under `default`. Support both rather than assuming the user's major.
+          const mod = (await import("@babel/core")) as unknown as {
+            transformAsync?: typeof import("@babel/core").transformAsync;
+            default?: { transformAsync?: typeof import("@babel/core").transformAsync };
+          };
+          transformAsync = mod.transformAsync ?? mod.default?.transformAsync;
         } catch {
+          /* fall through to the error below */
+        }
+        if (!transformAsync) {
           throw new Error(
             "[react-render-detective] @babel/core is required for automatic instrumentation.\n" +
               "Install it (`npm i -D @babel/core`) or remove the renderDetective() plugin.",
@@ -53,7 +62,7 @@ export function renderDetective(options: VitePluginOptions = {}): MinimalVitePlu
         }
       }
 
-      const result = await babel.transformAsync(code, {
+      const result = await transformAsync(code, {
         filename: id,
         babelrc: false,
         configFile: false,
