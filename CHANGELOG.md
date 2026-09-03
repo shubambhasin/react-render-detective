@@ -11,6 +11,10 @@ dependencies, and `react` as its only peer.
 
 `0.1.0` was published before the four defects below were found, and should also be avoided.
 
+Releases now come from CI on a tag, never from a local tree, and a publish guard
+(`scripts/verify-package.mjs`, wired to `prepublishOnly`) checks the packed tarball and refuses to
+publish a manifest that differs from the committed one. See [docs/RELEASING.md](docs/RELEASING.md).
+
 ## 0.1.1
 
 Withdrawn — see above. Contents are otherwise the same as `0.1.2`.

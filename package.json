@@ -60,7 +60,8 @@
     "test:watch": "vitest",
     "size": "npm run build && node scripts/size.mjs",
     "bench": "node bench/run.mjs",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build && node scripts/verify-package.mjs",
+    "verify": "node scripts/verify-package.mjs"
   },
   "peerDependencies": {
     "react": ">=16.9.0"
