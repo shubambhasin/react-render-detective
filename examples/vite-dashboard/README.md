@@ -19,6 +19,7 @@ Then open the console (and the overlay in the bottom-right) and interact with th
 | 3 | `TableRow` | `memo` defeated by an unstable `onSelect` | reference-only prop change on a memoized child |
 | 4 | `Dashboard` | `rows` recomputed and reallocated on unrelated state changes | reference-only change with identical contents |
 | 5 | `Dashboard` | inline `handleSelect` / `onOpenModal` closures | new function reference each render |
+| 6 | `Dashboard` | `StatusBadge` declared inside the render body | *rebuilt*, not re-rendered — whole subtree discarded each render |
 
 Toggle **Show fixed version** to run the same UI with `useMemo` / `useCallback` applied, then
 compare:

@@ -200,6 +200,14 @@ function Modal({ open, onClose }: { open: boolean; onClose: () => void }) {
 /* ---------------------------------------------------------------- dashboard */
 
 function Dashboard() {
+  /*
+   * PROBLEM 6 — a component declared inside another component's render body.
+   * React sees a brand new component type on every Dashboard render, so it
+   * throws the whole subtree away and rebuilds it. Far more expensive than any
+   * re-render, and it resets any state the subtree held.
+   */
+  const StatusBadge = ({ count }: { count: number }) => <span className="badge">{count} results</span>;
+
   const [query, setQuery] = useTrackedState("query", "");
   const [category, setCategory] = useTrackedState("category", "All");
   const [page, setPage] = useTrackedState("page", 0);
@@ -220,6 +228,7 @@ function Dashboard() {
         <Sidebar active="Products" />
         <main>
           <Filters query={query} category={category} onQuery={setQuery} onCategory={setCategory} />
+          <StatusBadge count={rows.length} />
           <Chart rows={rows} />
           <ProductTable rows={rows} page={Math.min(page, pages - 1)} onSelect={handleSelect} />
           <Pagination page={Math.min(page, pages - 1)} pages={pages} onPage={setPage} />

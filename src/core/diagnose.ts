@@ -30,6 +30,10 @@ export interface DiagnosisInput {
   contextChanges: ContextChange[];
   /** Named state updates from `useTrackedState`. Empty unless opted in. */
   trackedState: TrackedStateChange[];
+  /** How many times this component has been rebuilt rather than re-rendered. */
+  remounts: number;
+  /** The component looks like it is declared inside another component's render body. */
+  inlineDefinitionSuspected: boolean;
   selfDuration: number;
   attempts: number;
   committed: boolean;
@@ -74,6 +78,32 @@ function classify(input: DiagnosisInput): Diagnosis {
   const { changedProps, contextChanges, parentRendered, parentUnknown, parentName } = input;
 
   if (input.phase === "mount") {
+    /*
+     * A remount is not a render: React threw the previous instance away, along
+     * with its DOM and all of its state, and built a new one. It costs far more
+     * than any re-render, so it is worth saying loudly — but only when it has
+     * actually happened repeatedly, since mounting is also just what happens
+     * when a list grows or a route changes.
+     */
+    if (input.remounts >= 2) {
+      const inline = input.inlineDefinitionSuspected;
+      return make(
+        "mount",
+        inline ? "high" : "medium",
+        `${input.componentName} was rebuilt, not re-rendered — this is remount ${input.remounts + 1}.`,
+        [
+          `This component has been unmounted and mounted again ${input.remounts}× — its DOM and all of its state were discarded each time.`,
+          inline
+            ? "Its definition is being re-created repeatedly in a short window, which means it is declared *inside* another component's render body. React sees a new component type on every parent render and cannot reuse anything."
+            : "Its definition is stable, so the remounts come from the element identity changing — usually a changing `key`, or the component moving between branches of a conditional.",
+          "A remount is much more expensive than a re-render, and it resets state.",
+        ],
+        true,
+        inline
+          ? `Move ${input.componentName} out of its parent's render body to module scope. Defining a component inside another component makes React discard and rebuild the whole subtree on every parent render.`
+          : `Check the \`key\` given to ${input.componentName}, and whether it is being rendered from a different branch each time.`,
+      );
+    }
     return make("mount", "high", `${input.componentName} mounted.`, ["First render of this instance."], false);
   }
 

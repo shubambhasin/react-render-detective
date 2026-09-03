@@ -170,6 +170,11 @@ export interface ComponentStats {
   source?: string;
   renderCount: number;
   mountCount: number;
+  /**
+   * Mounts that followed an unmount of the same component — the component was
+   * rebuilt rather than re-rendered, which is far more expensive.
+   */
+  remountCount: number;
   uncommittedAttempts: number;
   devReplays: number;
   totalSelfDuration: number;

@@ -17,6 +17,8 @@ const input = (over: Partial<DiagnosisInput> = {}): DiagnosisInput => ({
   changedProps: [],
   contextChanges: [],
   trackedState: [],
+  remounts: 0,
+  inlineDefinitionSuspected: false,
   selfDuration: 2,
   attempts: 1,
   committed: true,
@@ -35,6 +37,29 @@ describe("diagnostic accuracy fixtures", () => {
   it("mount is reported as mount, never as waste", () => {
     const d = diagnose(input({ phase: "mount" }), t);
     expect(d.reason).toBe("mount");
+    expect(d.potentiallyAvoidable).toBe(false);
+  });
+
+  it("names an inline component definition as the cause of repeated remounts", () => {
+    const d = diagnose(input({ phase: "mount", remounts: 6, inlineDefinitionSuspected: true }), t);
+    expect(d.reason).toBe("mount");
+    expect(d.confidence).toBe("high");
+    expect(d.potentiallyAvoidable).toBe(true);
+    expect(d.summary).toContain("rebuilt, not re-rendered");
+    expect(d.suggestion).toContain("out of its parent's render body");
+  });
+
+  it("points at key churn when the definition is stable", () => {
+    const d = diagnose(input({ phase: "mount", remounts: 6, inlineDefinitionSuspected: false }), t);
+    expect(d.confidence).toBe("medium");
+    expect(d.evidence.join(" ")).toContain("element identity");
+    expect(d.suggestion).toContain("`key`");
+  });
+
+  it("does not cry remount over ordinary mounting", () => {
+    // A growing list mounts components; that is not a defect.
+    const d = diagnose(input({ phase: "mount", remounts: 1 }), t);
+    expect(d.summary).toBe("UserProfile mounted.");
     expect(d.potentiallyAvoidable).toBe(false);
   });
 

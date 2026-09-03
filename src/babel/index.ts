@@ -55,6 +55,13 @@ export default function renderDetectiveBabelPlugin(
   api: { types: typeof BabelTypes; assertVersion?: (v: number | string) => void },
 ): PluginObject {
   const t = api.types;
+  /*
+   * Guards against re-processing a node we just rewrote. Using `path.skip()`
+   * for that was a mistake: it skips the entire subtree, so components declared
+   * *inside* another component were never instrumented — exactly the case the
+   * remount diagnosis exists to catch.
+   */
+  const processed = new WeakSet<BabelTypes.Node>();
   // Babel 7 and 8 both work: only `types`, `NodePath` and the visitor shape are
   // used, all stable across the major.
   api.assertVersion?.("^7.0.0-0 || ^8.0.0-0");
@@ -134,6 +141,16 @@ export default function renderDetectiveBabelPlugin(
     ];
     const source = locationOf(node, state);
     if (source) properties.push(t.objectProperty(t.identifier("source"), t.stringLiteral(source)));
+
+    /*
+     * Whether a component is declared inside another function is a *static*
+     * fact, and the compiler is standing right here. The runtime previously
+     * guessed at it by timing repeated definitions, which failed the moment a
+     * user clicked more than five seconds apart.
+     */
+    if (path.getFunctionParent()) {
+      properties.push(t.objectProperty(t.identifier("declaredInRender"), t.booleanLiteral(true)));
+    }
     state.rrdTouched = true;
     return t.callExpression(ensureImport(path, state), [fn, t.objectExpression(properties)]);
   }
@@ -190,6 +207,9 @@ export default function renderDetectiveBabelPlugin(
          * ESM export bindings are live, so `export function Foo` still exports
          * the wrapper.
          */
+        if (processed.has(path.node)) return;
+        processed.add(path.node);
+
         const wrapped = wrap(t.cloneNode(id), id.name, path.node, path, state);
         const assignment = t.expressionStatement(t.assignmentExpression("=", t.cloneNode(id), wrapped));
         (assignment as { _rrdGenerated?: boolean })._rrdGenerated = true;
@@ -200,7 +220,6 @@ export default function renderDetectiveBabelPlugin(
         } else {
           path.insertAfter(assignment);
         }
-        path.skip();
       },
 
       /** `const Foo = () => <div />` and `const Foo = memo(() => <div />)` */
@@ -227,8 +246,9 @@ export default function renderDetectiveBabelPlugin(
         if (isAlreadyWrapped(target)) return;
         if (!returnsJsx(target as NodePath<BabelTypes.Function>)) return;
 
+        if (processed.has(path.node)) return;
+        processed.add(path.node);
         target.replaceWith(wrap(target.node as BabelTypes.Expression, id.name, path.node, path, state));
-        path.skip();
       },
 
       /** `export default function () { return <div /> }` */
@@ -245,8 +265,9 @@ export default function renderDetectiveBabelPlugin(
           declaration.node.generator,
           declaration.node.async,
         );
+        if (processed.has(path.node)) return;
+        processed.add(path.node);
         path.replaceWith(t.exportDefaultDeclaration(wrap(expression, name, declaration.node, path, state)));
-        path.skip();
       },
     },
   };

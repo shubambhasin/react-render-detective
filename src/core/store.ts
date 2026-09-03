@@ -28,6 +28,28 @@ export interface CommitInput {
   commitTime: number;
 }
 
+export interface Lifecycle {
+  mounts: number;
+  unmounts: number;
+  /** Mounts that followed an unmount of the same component. */
+  remounts: number;
+}
+
+interface DefinitionRecord {
+  name: string;
+  count: number;
+  firstSeen: number;
+  lastSeen: number;
+  /** Reported by the build plugin, which knows this statically. */
+  declaredInRender: boolean;
+}
+
+/** Repeated definitions inside this window mean a render loop, not hot reload. */
+const INLINE_DEFINITION_WINDOW_MS = 5000;
+
+const timestamp = (): number =>
+  typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
+
 const EMPTY_STATE: TrackedStateChange[] = [];
 const DURATION_SAMPLE = 200;
 const SWEEP_DELAY_MS = 250;
@@ -50,6 +72,10 @@ interface NodeRecord {
   pendingState: TrackedStateChange[];
   /** Set as soon as a commit is queued, so mount detection never waits on flush. */
   seenCommit: boolean;
+  /** Has this instance ever been attached? Distinguishes a real mount from a StrictMode replay. */
+  everAttached?: boolean;
+  /** Currently detached. Cleared if the same node re-attaches (StrictMode does exactly that). */
+  detached?: boolean;
   /**
    * `useId` of the first component to call `useTrackedState` under this node.
    * Later callers (descendants) cannot claim state attribution from it.
@@ -113,6 +139,10 @@ export class Detective {
   private flushScheduled = false;
   private sweepHandle: ReturnType<typeof setTimeout> | undefined;
   private nextId = 0;
+  /** Mount/unmount history per component name, for remount detection. */
+  private lifecycles = new Map<string, Lifecycle>();
+  /** How often each component *definition* has been wrapped. */
+  private definitions = new Map<string, DefinitionRecord>();
   /** Nodes created by `useRenderDiagnostics`, where props/state cannot be separated. */
   readonly hookModeNodes = new WeakSet<NodeRecord>();
   private initialized = false;
@@ -196,22 +226,87 @@ export class Detective {
 
   attach(node: NodeRecord): void {
     this.nodes.set(node.id, node);
+
+    /*
+     * StrictMode simulates an unmount by running effect cleanups and then the
+     * effects again on the *same* fiber, so the same node detaches and
+     * re-attaches. That is not a remount, and counting it would flag every
+     * component in a StrictMode app. A real remount always produces a new node,
+     * because `useState` runs afresh.
+     */
+    if (node.detached) {
+      node.detached = false;
+      const existing = this.lifecycles.get(node.name);
+      if (existing) existing.unmounts--;
+      return;
+    }
+    if (node.everAttached) return;
+    node.everAttached = true;
+
+    const life = this.lifecycleFor(node.name);
+    life.mounts++;
+    if (life.unmounts > 0) life.remounts++;
   }
 
   detach(node: NodeRecord): void {
     /*
-     * Registry removal only — deliberately NOT clearing `prevProps`.
-     *
-     * StrictMode simulates an unmount/remount by running every effect's cleanup
-     * and then the effect again. Wiping the previous props here made the first
-     * real update after mount diff against `{}` and report every prop as newly
-     * added — a confident, wrong diagnosis on the first update of every
-     * component in a StrictMode app.
-     *
-     * Memory is bounded by dropping the node from the registry: after a genuine
-     * unmount nothing references it, so it is collected along with its props.
+     * Registry removal only — deliberately NOT clearing `prevProps`. Wiping
+     * them here made the first real update after mount diff against `{}` and
+     * report every prop as newly added, because StrictMode runs cleanups on
+     * components that are still mounted. Memory is bounded by dropping the node
+     * from the registry: after a genuine unmount nothing references it.
      */
     this.nodes.delete(node.id);
+    if (node.everAttached && !node.detached) {
+      node.detached = true;
+      this.lifecycleFor(node.name).unmounts++;
+    }
+  }
+
+  private lifecycleFor(name: string): Lifecycle {
+    let life = this.lifecycles.get(name);
+    if (!life) this.lifecycles.set(name, (life = { mounts: 0, unmounts: 0, remounts: 0 }));
+    return life;
+  }
+
+  /**
+   * Called once per `withRenderDetective` call. A component declared at module
+   * scope is wrapped once; one declared *inside* a render body is wrapped again
+   * on every render of its parent — which also forces React to throw away and
+   * rebuild its entire subtree. That is the signal.
+   */
+  noteDefinition(name: string, source: string | undefined, declaredInRender = false): void {
+    const key = source ?? name;
+    const now = timestamp();
+    const record = this.definitions.get(key);
+    if (!record) {
+      this.definitions.set(key, { name, count: 1, firstSeen: now, lastSeen: now, declaredInRender });
+      return;
+    }
+    record.count++;
+    record.lastSeen = now;
+    if (declaredInRender) record.declaredInRender = true;
+  }
+
+  /**
+   * Is this component declared inside another component's render body?
+   *
+   * The build plugin answers this statically and exactly. Without it we fall
+   * back to a rate heuristic — repeated definitions of the same component in a
+   * short window — which is weaker: hot reload also re-defines components, and
+   * a user clicking slowly stretches the window. Hence the plugin's answer wins.
+   */
+  inlineDefinitionSuspected(name: string): boolean {
+    for (const record of this.definitions.values()) {
+      if (record.name !== name) continue;
+      if (record.declaredInRender) return true;
+      if (record.count >= 3 && record.lastSeen - record.firstSeen < INLINE_DEFINITION_WINDOW_MS) return true;
+    }
+    return false;
+  }
+
+  lifecycleOf(name: string): Lifecycle {
+    return this.lifecycles.get(name) ?? { mounts: 0, unmounts: 0, remounts: 0 };
   }
 
   /** Hot path. Must stay allocation-free and O(1). */
@@ -426,6 +521,8 @@ export class Detective {
         attempts: rec.attempts,
         committed: true,
         trackedState,
+        remounts: this.lifecycleOf(node.name).remounts,
+        inlineDefinitionSuspected: this.inlineDefinitionSuspected(node.name),
         priorAvoidableRenders: node.stats.potentiallyAvoidableRenders,
       },
       this.config.thresholds,
@@ -519,7 +616,7 @@ export class Detective {
     for (const node of this.nodes.values()) {
       if (name && node.name !== name) continue;
       if (node.stats.renderCount === 0 && node.stats.uncommittedAttempts === 0) continue;
-      out.push(toStats(node));
+      out.push(toStats(node, this.lifecycleOf(node.name)));
     }
     return out;
   }
@@ -570,6 +667,8 @@ export class Detective {
   reset(): void {
     this.clear();
     this.nodes.clear();
+    this.lifecycles.clear();
+    this.definitions.clear();
     this.listeners.clear();
     if (this.sweepHandle !== undefined) clearTimeout(this.sweepHandle);
     this.sweepHandle = undefined;
@@ -585,7 +684,7 @@ function percentile(sorted: number[], p: number): number {
   return sorted[idx] as number;
 }
 
-function toStats(node: NodeRecord): ComponentStats {
+function toStats(node: NodeRecord, lifecycle: Lifecycle): ComponentStats {
   const sorted = [...node.durations].sort((a, b) => a - b);
   const s = node.stats;
   return {
@@ -594,6 +693,7 @@ function toStats(node: NodeRecord): ComponentStats {
     source: node.source,
     renderCount: s.renderCount,
     mountCount: s.mountCount,
+    remountCount: lifecycle.remounts,
     uncommittedAttempts: s.uncommittedAttempts,
     devReplays: s.devReplays,
     totalSelfDuration: s.totalSelfDuration,
@@ -619,6 +719,7 @@ function mergeStats(a: ComponentStats, b: ComponentStats): ComponentStats {
     source: a.source ?? b.source,
     renderCount,
     mountCount: a.mountCount + b.mountCount,
+    remountCount: Math.max(a.remountCount, b.remountCount),
     uncommittedAttempts: a.uncommittedAttempts + b.uncommittedAttempts,
     devReplays: a.devReplays + b.devReplays,
     totalSelfDuration: total,

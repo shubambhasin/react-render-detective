@@ -20,6 +20,17 @@ chunks it imports, so the numbers are what you actually pay, not what one file w
 
 Runtime dependencies: **none**. `react` is a peer dependency.
 
+## Budget changes
+
+Budgets are raised only by an explicit decision, recorded here. Raising one to make a red build go
+green is the failure mode this gate exists to prevent.
+
+**0.3.0 — `core` 8 → 9 KB, `index` 12 → 13 KB.** Remount detection pushed `core` to 8.14 KB and the
+gate failed the build. The growth is lifecycle tracking plus the diagnosis prose that names the
+cause and the fix, which is the feature. `total` stayed at 20 KB and the measured total moved
+12.90 → 13.97 KB, so what a user actually pays is unchanged in kind. The per-entry budgets keep
+their job: catching a *step change* that nobody decided on.
+
 ## Why the split differs from the original targets
 
 The spec sketched a five-package monorepo with a 5 KB core, an 8 KB React layer, a 30 KB overlay

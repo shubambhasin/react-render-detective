@@ -85,13 +85,13 @@ export function reset(): void {
  * single, human explanation. Returns `undefined` if nothing was recorded.
  */
 export function explain(componentName: string): string | undefined {
-  const explanation = explainEvents(componentName, getEvents());
+  const explanation = explainStructured(componentName);
   return explanation ? formatExplanation(explanation) : undefined;
 }
 
 /** Structured form of `explain`, for building UIs on top. */
 export function explainStructured(componentName: string) {
-  return explainEvents(componentName, getEvents());
+  return explainEvents(componentName, getEvents(), getDetective().lifecycleOf(componentName));
 }
 
 /** Prints the application-level dashboard (§53). */
@@ -106,6 +106,14 @@ export function printStats(): void {
     `Slow renders             ${s.slowRenders}`,
     `Potentially avoidable    ${s.potentiallyAvoidableRenders}`,
   ];
+  const rebuilt = s.mostRendered.filter((c) => c.remountCount >= 2);
+  if (rebuilt.length > 0) {
+    lines.push(
+      "",
+      "Rebuilt rather than re-rendered (state and DOM discarded each time)",
+      ...rebuilt.slice(0, 5).map((c) => `  ${c.name.padEnd(22)} ${String(c.remountCount).padStart(5)}× remounted`),
+    );
+  }
   if (s.devReplays > 0) {
     lines.push(`Development replays      ${s.devReplays} (StrictMode / discarded — not counted above)`);
   }

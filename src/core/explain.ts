@@ -18,6 +18,8 @@ export interface Explanation {
   potentiallyAvoidableRenders: number;
   estimatedAvoidableTime: number;
   devReplays: number;
+  /** Times the component was rebuilt rather than re-rendered. */
+  remounts: number;
   headline: string;
   nextStep: string;
   confidence: Confidence;
@@ -27,7 +29,11 @@ export interface Explanation {
  * The flagship "explain this render" answer, aggregated across the recorded
  * history of one component. Pure — no React, no console.
  */
-export function explainEvents(component: string, events: RenderEvent[]): Explanation | undefined {
+export function explainEvents(
+  component: string,
+  events: RenderEvent[],
+  lifecycle?: { remounts: number },
+): Explanation | undefined {
   const mine = events.filter((e) => e.component.name === component);
   if (mine.length === 0) return undefined;
 
@@ -90,7 +96,21 @@ export function explainEvents(component: string, events: RenderEvent[]): Explana
   let nextStep: string;
   let confidence: Confidence = "medium";
 
-  if (topProp && topProp.share >= 0.5) {
+  const remounts = lifecycle?.remounts ?? 0;
+
+  /*
+   * Remounts outrank every render explanation. A component being rebuilt is
+   * throwing away its DOM and its state, which costs more than any number of
+   * re-renders — so if that is happening, it is the headline.
+   */
+  if (remounts >= 2) {
+    const mountEvent = [...mine].reverse().find((e) => e.phase === "mount");
+    headline = `${component} was rebuilt ${remounts}× rather than re-rendered — its DOM and state were discarded each time.`;
+    nextStep =
+      mountEvent?.diagnosis.suggestion ??
+      `Check whether ${component} is declared inside another component's render body, or receives a changing \`key\`.`;
+    confidence = mountEvent?.diagnosis.confidence ?? "medium";
+  } else if (topProp && topProp.share >= 0.5) {
     headline = `${pct(topProp.share)} of updates followed \`${topProp.key}\` changing by reference while its contents stayed the same.`;
     // `parent` is the nearest instrumented ancestor — where the prop arrives
     // from, which is not necessarily where it is created. Say the former.
@@ -153,6 +173,7 @@ export function explainEvents(component: string, events: RenderEvent[]): Explana
     potentiallyAvoidableRenders: avoidable,
     estimatedAvoidableTime: avoidableTime,
     devReplays: replays,
+    remounts,
     headline,
     nextStep,
     confidence,
@@ -177,6 +198,10 @@ export function formatExplanation(e: Explanation): string {
     for (const p of e.unstableProps) {
       lines.push(`  ${p.key.padEnd(18)} ${String(p.count).padStart(5)}  ${pct(p.share)}  (${p.valueType})`);
     }
+  }
+
+  if (e.remounts > 0) {
+    lines.push("", `Rebuilt ${e.remounts}× (unmounted and mounted again — state and DOM discarded)`);
   }
 
   lines.push(

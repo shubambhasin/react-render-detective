@@ -257,6 +257,39 @@ history rather than a series of gaps that would break prop diffing.
 
 ---
 
+## Remounts
+
+A remount is not a render. React discarded the component instance — its DOM, and all of its state —
+and built a new one. It is far more expensive than any re-render, and it is usually a bug:
+
+```text
+StatusBadge   src/App.tsx:209:9
+
+Why?
+  StatusBadge was rebuilt 2× rather than re-rendered — its DOM and state were discarded each time.
+
+Next step
+  Move StatusBadge out of its parent's render body to module scope. Defining a component inside
+  another component makes React discard and rebuild the whole subtree on every parent render.
+
+Confidence: high
+```
+
+Two causes are distinguished:
+
+| cause | how it is known | confidence |
+| --- | --- | --- |
+| declared inside another component's render body | the build plugin knows this statically | high |
+| the element identity changed — usually a changing `key` | the definition is stable, so it must be the element | medium |
+
+Without the build plugin the first case falls back to a rate heuristic (repeated definitions in a
+short window), which is weaker — hot reload also re-defines components. One more reason to use the
+plugin.
+
+StrictMode's simulated unmount/remount is excluded: it reuses the same fiber, while a real remount
+always produces a new instance. And ordinary mounting is never flagged — a growing list mounts
+components, which is just a list working.
+
 ## Reading a diagnosis
 
 Every event answers five questions:

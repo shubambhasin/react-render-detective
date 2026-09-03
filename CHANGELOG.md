@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.3.0
+
+### Added — remount detection
+
+A remount is not a render: React throws the instance away, along with its DOM and all of its state,
+and builds a new one. It costs more than any re-render, and the two most common causes are silent.
+
+- Components rebuilt rather than re-rendered are now counted (`remountCount`) and reported, with the
+  cause named: a component **declared inside another component's render body**, or a **changing
+  `key`**.
+- The inline-definition case is answered *statically by the build plugin*, which passes
+  `declaredInRender`. A first attempt inferred it at runtime by timing repeated definitions, and it
+  broke as soon as a user clicked more than five seconds apart — the compiler already knows the
+  answer, so it tells the runtime instead of the runtime guessing.
+- StrictMode's simulated unmount/remount is excluded: it reuses the same fiber, whereas a real
+  remount always produces a new instance. Without that, every component in a StrictMode app would be
+  flagged.
+- Ordinary mounting is not flagged. A growing list mounts components; nothing is reported until a
+  component has actually been rebuilt repeatedly.
+- Surfaced in `explain()` (it outranks every render explanation), `printStats()` and the overlay.
+
+### Fixed
+
+- The build plugin skipped the entire body of any component it instrumented, so components declared
+  **inside** another component — the exact case remount detection exists for — were never seen.
+  `path.skip()` replaced with a processed-node guard.
+- The Vite plugin assumed Babel 8's ESM shape and would have failed for anyone on Babel 7.
+
 ## 0.2.0
 
 ### Added — automatic instrumentation

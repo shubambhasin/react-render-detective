@@ -13,6 +13,12 @@ export interface TrackOptions {
    * is no runtime way to obtain it.
    */
   source?: string;
+  /**
+   * Set by the build plugin when the component is declared inside another
+   * function. React sees a new component type on every parent render and
+   * rebuilds the whole subtree, so this turns a guess into a fact.
+   */
+  declaredInRender?: boolean;
 }
 
 /**

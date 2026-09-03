@@ -100,7 +100,12 @@ export function mountOverlay(): OverlayHandle {
     listEl.innerHTML = rows
       .map((s) => {
         const waste = s.potentiallyAvoidableRenders;
-        const flag = waste > 0 ? `<span class="warn">${waste} avoidable</span>` : "";
+        const flag =
+          s.remountCount >= 2
+            ? `<span class="warn">${s.remountCount}× rebuilt</span>`
+            : waste > 0
+              ? `<span class="warn">${waste} avoidable</span>`
+              : "";
         return `<div class="row${s.name === selected ? " sel" : ""}" data-name="${escapeHtml(s.name)}" title="${escapeHtml(s.source ?? s.name)}">
           <span class="name">${escapeHtml(s.name)}</span>
           <span class="num">${s.renderCount}</span>
@@ -111,7 +116,7 @@ export function mountOverlay(): OverlayHandle {
       .join("");
 
     if (selected) {
-      const explanation = explainEvents(selected, detective.getEvents());
+      const explanation = explainEvents(selected, detective.getEvents(), detective.lifecycleOf(selected));
       detailEl.textContent = explanation ? formatExplanation(explanation) : `No recorded renders for ${selected}.`;
     }
   }

@@ -138,3 +138,46 @@ describe("self-instrumentation", () => {
     expect(compile(code, {}, "/repo/react-render-detective/src/react/withRenderDetective.tsx")).not.toContain("_rrdTrack");
   });
 });
+
+describe("nested components", () => {
+  it("instruments a component declared inside another component", () => {
+    // This is the whole point of remount detection: a component defined in a
+    // render body is rebuilt on every parent render. It has to be seen first.
+    const out = compile(`
+      function Dashboard() {
+        const Badge = ({ n }) => <span>{n}</span>;
+        return <div><Badge n={1} /></div>;
+      }
+    `);
+    expect(out).toContain('name: "Badge"');
+    expect(out).toContain('name: "Dashboard"');
+  });
+
+  it("instruments components after a wrapped one in the same file", () => {
+    const out = compile(`
+      function First() { return <div />; }
+      function Second() { return <div />; }
+      const Third = () => <div />;
+    `);
+    for (const name of ["First", "Second", "Third"]) expect(out).toContain(`name: "${name}"`);
+  });
+});
+
+describe("declaredInRender", () => {
+  it("marks a component declared inside another component", () => {
+    const out = compile(`
+      function Dashboard() {
+        const Badge = () => <span />;
+        return <Badge />;
+      }
+    `);
+    // Static fact from the compiler, not a runtime guess.
+    expect(out).toMatch(/name: "Badge",[\s\S]*?declaredInRender: true/);
+    expect(out).not.toMatch(/name: "Dashboard",[\s\S]*?declaredInRender: true/);
+  });
+
+  it("does not mark module-scope components", () => {
+    const out = compile(`const Badge = () => <span />;`);
+    expect(out).not.toContain("declaredInRender");
+  });
+});

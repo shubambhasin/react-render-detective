@@ -483,3 +483,99 @@ describe("double wrapping", () => {
     expect(eventsFor("DoubleWrapped")).toHaveLength(1);
   });
 });
+
+describe("remount detection", () => {
+  it("catches a component defined inside a render body", () => {
+    setup();
+    const Host = track("InlineHost", function InlineHost() {
+      const [tick, setTick] = useState(0);
+      // The bug: a new component type on every render, so React discards and
+      // rebuilds the entire subtree instead of updating it.
+      const Inner = track("InlineChild", function InlineChild() {
+        return <i>inner</i>;
+      });
+      return (
+        <div>
+          <button onClick={() => setTick(tick + 1)}>go</button>
+          <Inner />
+        </div>
+      );
+    });
+
+    const { getByText } = render(<Host />);
+    for (let i = 0; i < 4; i++) act(() => void fireEvent.click(getByText("go")));
+
+    const stats = getComponentStats("InlineChild")[0];
+    expect(stats?.remountCount).toBeGreaterThanOrEqual(3);
+
+    const last = lastFor("InlineChild") as RenderEvent;
+    expect(last.phase).toBe("mount");
+    expect(last.diagnosis.confidence).toBe("high");
+    expect(last.diagnosis.summary).toContain("rebuilt, not re-rendered");
+    expect(last.diagnosis.suggestion).toContain("out of its parent's render body");
+  });
+
+  it("catches key churn, and does not blame the definition for it", () => {
+    setup();
+    const Row = track("KeyedRow", function KeyedRow() {
+      return <i>row</i>;
+    });
+    const List = track("KeyedList", function KeyedList({ epoch }: { epoch: number }) {
+      // A stable component, but a key that changes every render — React cannot
+      // reuse the instance.
+      return <Row key={`row-${epoch}`} />;
+    });
+
+    const { rerender } = render(<List epoch={0} />);
+    for (let i = 1; i <= 4; i++) act(() => rerender(<List epoch={i} />));
+
+    const stats = getComponentStats("KeyedRow")[0];
+    expect(stats?.remountCount).toBeGreaterThanOrEqual(3);
+    const last = lastFor("KeyedRow") as RenderEvent;
+    expect(last.diagnosis.confidence).toBe("medium");
+    expect(last.diagnosis.suggestion).toContain("`key`");
+  });
+
+  it("does not mistake StrictMode's simulated remount for a real one", () => {
+    setup();
+    const Solo = track("StrictRemount", function StrictRemount() {
+      return <i>x</i>;
+    });
+    render(
+      <StrictMode>
+        <Solo />
+      </StrictMode>,
+    );
+    // StrictMode mounts, unmounts and remounts every component on mount. It
+    // reuses the same fiber, so it must not register as a remount.
+    expect(getComponentStats("StrictRemount")[0]?.remountCount).toBe(0);
+  });
+
+  it("does not flag a list that legitimately grows and shrinks", () => {
+    setup();
+    const Item = track("ListItem", function ListItem({ id }: { id: number }) {
+      return <li>{id}</li>;
+    });
+    const List = track("GrowingList", function GrowingList({ ids }: { ids: number[] }) {
+      return (
+        <ul>
+          {ids.map((id) => (
+            <Item key={id} id={id} />
+          ))}
+        </ul>
+      );
+    });
+
+    const { rerender } = render(<List ids={[1, 2]} />);
+    act(() => rerender(<List ids={[1, 2, 3]} />));
+    act(() => rerender(<List ids={[1, 2]} />));
+    act(() => rerender(<List ids={[1, 2, 3]} />));
+
+    // Item 3 mounts, unmounts and mounts again — that is the list working, and
+    // the count reflects it, but nothing is diagnosed as a defect until it
+    // repeats.
+    const last = lastFor("ListItem") as RenderEvent;
+    expect(last.diagnosis.potentiallyAvoidable).toBe(false);
+    expect(last.diagnosis.summary).not.toContain("rebuilt");
+  });
+});

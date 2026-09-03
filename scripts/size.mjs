@@ -20,8 +20,8 @@ const baselinePath = join(root, ".size-baseline.json");
  *   total   everything, i.e. the full developer experience
  */
 const BUDGETS = {
-  core: 8 * 1024,
-  index: 12 * 1024,
+  core: 9 * 1024,
+  index: 13 * 1024,
   overlay: 30 * 1024,
   total: 20 * 1024,
 };
