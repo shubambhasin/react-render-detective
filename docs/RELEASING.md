@@ -30,9 +30,46 @@ nothing uncommitted to publish.
    gh secret set NPM_TOKEN --repo shubambhasin/react-render-detective
    ```
 
+## Test against a real app first
+
+Publishing to test is backwards. Every defect that mattered in 0.1.x–0.4.0 was found by running the
+package in a real application, not by the test suite:
+
+| found by | defect |
+| --- | --- |
+| a real browser | `init()` recorded nothing under Vite; StrictMode wiped the mount props |
+| the bundled example | the plugin instrumented its own runtime into a stack overflow |
+| a real app (167k lines) | console output unusable at list scale — ~200 lines of `FareTile #1 mount` |
+
+So install the local build into the app before tagging anything:
+
+```bash
+npm run use-local -- ../path/to/app
+```
+
+That builds, runs the **publish guard**, packs a tarball, and installs it with `--no-save`, so the
+app's `package.json` is untouched and `npm ci` restores the published version.
+
+A tarball rather than `npm link`, deliberately: a symlink resolves `react` from *this* package's
+`node_modules`, so the app ends up with two Reacts and hooks fail in ways unrelated to your change.
+The tarball is byte-identical to what `npm publish` would upload, so it also exercises `files`, the
+exports map and the built output — exactly what broke in 0.1.1 and 0.1.2.
+
+Restart the app's dev server afterwards; bundlers cache resolved modules. Re-run the script after
+each change to the package.
+
+### Bundlers that cannot take the Babel plugin
+
+Create React App ignores project Babel config, so automatic instrumentation is unavailable without
+`craco` or ejecting. Those apps use manual `withRenderDetective` wrapping — which is worth testing
+directly, since it is what that (still large) population actually does.
+
 ## Cutting a release
 
 ```bash
+# 0. Test the local build in a real app (see above). Do not skip this.
+npm run use-local -- ../path/to/app
+
 # 1. Bump. Nothing else edits the version.
 npm version patch          # or minor / major
 
@@ -48,7 +85,7 @@ npm run verify -- --allow-dirty
 git add -A && git commit -m "Release vX.Y.Z"
 npm run verify
 
-# 5. Tag and push. The tag is what triggers the release.
+# 5. Tag and push. The tag IS the publish — confirm before this step.
 git tag -a vX.Y.Z -m "X.Y.Z"
 git push --follow-tags origin main
 ```

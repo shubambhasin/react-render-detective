@@ -10,34 +10,154 @@ const ICON: Record<string, string> = {
   critical: "■",
 };
 
-/** Attaches console output. Returns an unsubscribe so init() stays idempotent. */
+/** Batches are coalesced over this window so a burst prints once. */
+const BATCH_WINDOW_MS = 400;
+
+/**
+ * Console output.
+ *
+ * `console` mode reports **commits, not renders**. One line per render is
+ * unusable in a real application: a 20-row list mounting produced ~200 lines of
+ * `FareTile #1 mount 0.1ms`, which Chrome then collapsed into `2×` markers —
+ * pure noise that also slowed the app being measured. Worse, it buried the two
+ * or three lines that actually mattered.
+ *
+ * So a batch is summarised, and a batch that contains nothing actionable is not
+ * printed at all. `verbose` keeps the old per-render detail for when you have
+ * narrowed to one component with `include`.
+ */
 export function attachConsoleReporter(detective: Detective): () => void {
-  return detective.subscribe((event) => {
+  let pending: RenderEvent[] = [];
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const flush = (): void => {
+    timer = undefined;
+    const batch = pending;
+    pending = [];
+    if (batch.length === 0) return;
+    try {
+      printBatch(batch, detective.config.slowRenderThreshold);
+    } catch {
+      /* diagnostics must never break the app */
+    }
+  };
+
+  const unsubscribe = detective.subscribe((event) => {
     const mode = detective.config.mode;
     if (mode === "silent") return;
-    try {
-      if (mode === "verbose") printVerbose(event);
-      else printConcise(event, detective.config.slowRenderThreshold);
-    } catch {
-      /* ignore */
+
+    if (mode === "verbose") {
+      try {
+        printVerbose(event);
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+
+    pending.push(event);
+    if (timer === undefined) {
+      timer = setTimeout(flush, BATCH_WINDOW_MS);
+      (timer as { unref?: () => void }).unref?.();
     }
   });
+
+  return () => {
+    unsubscribe();
+    if (timer !== undefined) clearTimeout(timer);
+  };
 }
 
-function printConcise(event: RenderEvent, slowThreshold: number): void {
-  const { diagnosis, timings, component } = event;
-  const changed = event.changedProps.map((c) => c.key).join(", ");
-  const parts = [
-    `[RRD] ${component.name} #${event.renderNumber}`,
-    `Reason: ${label(event)}`,
-    changed ? `Changed: ${changed}` : undefined,
-    timings.subtreeDuration > 0 ? `Duration: ${timings.selfDuration.toFixed(1)}ms` : undefined,
-  ].filter(Boolean);
+interface Aggregate {
+  name: string;
+  source?: string;
+  count: number;
+  totalMs: number;
+  reasons: Map<string, number>;
+  /** Reasons of the renders that were actually actionable. */
+  notableReasons: Map<string, number>;
+  avoidable: number;
+  remount: boolean;
+  slow: boolean;
+  worst?: RenderEvent;
+}
 
-  const line = `${ICON[diagnosis.severity] ?? "·"} ${parts.join("  ")}`;
-  const slow = timings.selfDuration >= slowThreshold;
-  if (slow) console.warn(line);
-  else console.log(line);
+function printBatch(batch: RenderEvent[], slowThreshold: number): void {
+  const byComponent = new Map<string, Aggregate>();
+  let totalMs = 0;
+  let avoidable = 0;
+
+  for (const event of batch) {
+    const key = event.component.name;
+    const entry = byComponent.get(key) ?? {
+      name: key,
+      source: event.component.source,
+      count: 0,
+      totalMs: 0,
+      reasons: new Map<string, number>(),
+      notableReasons: new Map<string, number>(),
+      avoidable: 0,
+      remount: false,
+      slow: false,
+    };
+    entry.count++;
+    entry.totalMs += event.timings.selfDuration;
+    entry.reasons.set(event.diagnosis.reason, (entry.reasons.get(event.diagnosis.reason) ?? 0) + 1);
+    if (event.diagnosis.potentiallyAvoidable || event.timings.selfDuration >= slowThreshold) {
+      entry.notableReasons.set(event.diagnosis.reason, (entry.notableReasons.get(event.diagnosis.reason) ?? 0) + 1);
+    }
+    if (event.diagnosis.potentiallyAvoidable) entry.avoidable++;
+    if (event.diagnosis.summary.includes("rebuilt")) entry.remount = true;
+    if (event.timings.selfDuration >= slowThreshold) entry.slow = true;
+    if (!entry.worst || event.timings.selfDuration > entry.worst.timings.selfDuration) entry.worst = event;
+    byComponent.set(key, entry);
+
+    totalMs += event.timings.selfDuration;
+    if (event.diagnosis.potentiallyAvoidable) avoidable++;
+  }
+
+  /*
+   * Silence is the default. Renders that are cheap and fully explained are
+   * normal behaviour, and reporting them trains people to ignore the console.
+   */
+  const notable = [...byComponent.values()].filter((a) => a.avoidable > 0 || a.slow || a.remount);
+  if (notable.length === 0) return;
+
+  const headline =
+    `[RRD] ${batch.length} render${batch.length === 1 ? "" : "s"} · ${totalMs.toFixed(1)}ms` +
+    (avoidable > 0 ? ` · ${avoidable} potentially avoidable` : "");
+
+  const worstSeverity = notable.some((a) => a.slow) ? "slow" : "monitor";
+  const log = worstSeverity === "slow" ? console.warn : console.log;
+
+  const lines = notable
+    .sort((a, b) => b.totalMs - a.totalMs)
+    .slice(0, 8)
+    .map((a) => {
+      /*
+       * Show why the *actionable* renders happened. A batch containing 12 mounts
+       * and 12 avoidable updates would otherwise be labelled "mount", which is
+       * the half nobody can do anything about.
+       */
+      const source = a.notableReasons.size > 0 ? a.notableReasons : a.reasons;
+      const reason = [...source.entries()].sort((x, y) => y[1] - x[1])[0]?.[0] ?? "unknown";
+      const flags = [
+        a.remount ? "rebuilt" : undefined,
+        a.avoidable > 0 ? `${a.avoidable} avoidable` : undefined,
+      ].filter(Boolean);
+      return (
+        `  ${ICON[a.slow ? "slow" : "normal"]} ${a.name}${a.count > 1 ? ` ×${a.count}` : ""}`.padEnd(30) +
+        `${a.totalMs.toFixed(1)}ms  ${reason}${flags.length ? `  (${flags.join(", ")})` : ""}` +
+        (a.source ? `\n      ${a.source}` : "")
+      );
+    });
+
+  const worst = notable.sort((a, b) => b.totalMs - a.totalMs)[0]?.worst;
+  const hint = worst?.diagnosis.suggestion
+    ? `  → ${worst.diagnosis.suggestion}`
+    : "  → rrd.printOpportunities() to rank everything by recoverable time";
+
+  log(`${headline}\n${lines.join("\n")}\n${hint}`);
 }
 
 function printVerbose(event: RenderEvent): void {
@@ -67,9 +187,7 @@ function printVerbose(event: RenderEvent): void {
       for (const c of event.changedProps) console.log(propLine(c));
       console.groupEnd();
     }
-    if (event.unchangedProps.length > 0) {
-      console.log(`Props same:  ${event.unchangedProps.join(", ")}`);
-    }
+    if (event.unchangedProps.length > 0) console.log(`Props same:  ${event.unchangedProps.join(", ")}`);
     if (event.trackedState.length > 0) {
       console.log(
         `State:       ${event.trackedState

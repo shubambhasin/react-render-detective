@@ -314,21 +314,35 @@ describe("integration modes", () => {
 });
 
 describe("lifecycle and configuration", () => {
-  it("init is idempotent — three calls do not triple the output", () => {
+  it("init is idempotent — three calls do not triple the output", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     init({ enabled: true, mode: "console" });
     init({ enabled: true, mode: "console" });
     init({ enabled: true, mode: "console" });
 
-    const Solo = track("Solo", function Solo() {
-      return <i>x</i>;
+    // Needs a batch that actually reports something: cheap mounts are silent.
+    const Row = track("IdempotentRow", function IdempotentRow(_: { onPick: () => void }) {
+      return <i>row</i>;
     });
-    render(<Solo />);
-    act(() => {
-      getEvents();
+    const Host = track("IdempotentHost", function IdempotentHost() {
+      const [tick, setTick] = useState(0);
+      const onPick = () => {};
+      return (
+        <div>
+          <button onClick={() => setTick(tick + 1)}>go</button>
+          <Row onPick={onPick} />
+        </div>
+      );
     });
 
-    const mine = log.mock.calls.filter((c) => String(c[0]).includes("[RRD] Solo"));
+    const { getByText } = render(<Host />);
+    act(() => void fireEvent.click(getByText("go")));
+    getEvents();
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 500));
+    });
+
+    const mine = log.mock.calls.filter((c) => String(c[0]).includes("[RRD]"));
     expect(mine).toHaveLength(1);
     log.mockRestore();
   });

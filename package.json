@@ -76,7 +76,8 @@
     "size": "npm run build && node scripts/size.mjs",
     "bench": "node bench/run.mjs",
     "prepublishOnly": "npm run build && node scripts/verify-package.mjs",
-    "verify": "node scripts/verify-package.mjs"
+    "verify": "node scripts/verify-package.mjs",
+    "use-local": "node scripts/use-local.mjs"
   },
   "peerDependencies": {
     "react": ">=16.9.0",
