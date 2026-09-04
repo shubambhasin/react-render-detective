@@ -21,7 +21,7 @@ const baselinePath = join(root, ".size-baseline.json");
  */
 const BUDGETS = {
   core: 9 * 1024,
-  index: 16 * 1024,
+  index: 17 * 1024,
   overlay: 30 * 1024,
   total: 20 * 1024,
 };

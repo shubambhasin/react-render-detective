@@ -25,6 +25,17 @@ Runtime dependencies: **none**. `react` is a peer dependency.
 Budgets are raised only by an explicit decision, recorded here. Raising one to make a red build go
 green is the failure mode this gate exists to prevent.
 
+**0.5.0 — `index` 16 → 17 KB. The last raise.** Colouring and hot-reload-aware remount diagnosis
+pushed `index` to 16.48 KB. This is the third consecutive release to move this budget — 11 → 15 →
+16.5 KB — which is real drift, and `index` is the number that matters most, because it is what a
+typical consumer imports. `total` includes the overlay and the build plugins, which most apps never
+ship.
+
+So the next release that would exceed 17 KB **splits instead of raising**. The concrete plan:
+interaction/INP tracking (~4 KB) moves behind `react-render-detective/interactions` and becomes
+opt-in rather than started by `init()`. That is a breaking change to a published API, which is why
+it is scheduled rather than done in passing.
+
 **0.4.0 — `index` 13 → 16 KB.** Opportunity ranking, interaction attribution and the regression
 profile added ~3 KB gzip to the main entry. That is proportionate to three features, and `total`
 stayed at 20 KB with 17.11 KB measured.
