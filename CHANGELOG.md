@@ -1,5 +1,69 @@
 # Changelog
 
+## 0.5.0
+
+Everything here came out of pointing the tool at a real 167k-line application for the first time.
+Nothing in the test suite or the bundled example could have surfaced any of it.
+
+### Changed — console output reports commits, not renders
+
+A twenty-row list mounting produced roughly 200 lines of `FareTile #1 mount 0.1ms`, which Chrome
+then collapsed into `2×` markers. It buried the two lines that mattered, and printing it slowed the
+app being measured.
+
+- one aggregated line per batch, coalesced over 400ms
+- **a batch with nothing actionable prints nothing at all** — cheap, fully explained renders are
+  normal behaviour, and reporting them teaches people to ignore the console
+- per component: count, total cost, and the reason behind the *actionable* renders rather than the
+  most frequent one, so twelve mounts plus twelve avoidable updates is not labelled `mount`
+- `verbose` keeps the per-render detail for when `include` has narrowed the scope
+
+Measured on the same app afterwards: an entire search-and-sort session printed **two** lines.
+
+If you relied on a line per render, that is now `mode: "verbose"`.
+
+### Added — colour
+
+Red for a component that was rebuilt, amber for slow or avoidable, green for renders that were
+justified, grey for context. Colour never carries meaning on its own: every line keeps its glyph
+and its words, so the output survives being pasted into an issue or read with a different palette.
+The `%c` directive count and style-argument count are matched by construction, since a mismatch is
+the usual way this browser API breaks.
+
+### Fixed — hot reload is no longer diagnosed as a `key` problem
+
+Editing the package hot-reloaded the demo, React Fast Refresh rebuilt the tree, twenty rows
+remounted, and the tool announced *"rebuilt — check the `key` given to TableRow"*. The remount was
+real; the diagnosis was nonsense. This tool only ever runs in development, so hot reload is the
+single most common cause of remounts it will ever see — it would have said that to every user
+several times an hour.
+
+Remounts of three or more distinct components inside 1.5s are now reported as a whole-tree rebuild
+at low confidence, with nothing to fix. A real key problem affects one component; a reload affects
+many at once. The inline-definition signal still wins, because a component declared in a render
+body is a bug either way.
+
+### Added — the changelog is published and enforced
+
+Shipped in the tarball, rendered to
+[a page](https://shubambhasin.github.io/react-render-detective/changelog.html) at deploy time so it
+cannot drift, and required by `prepublishOnly` and the release workflow — a release with no entry
+is now impossible rather than merely discouraged. `npm version` inserts the heading and syncs the
+version strings that npm does not know about.
+
+### Added — a way to test locally before publishing
+
+`npm run use-local -- ../path/to/app` installs the working tree into a real application from a
+packed tarball, behind the same guard the publish path uses. Testing 0.4.0 in an app previously
+meant publishing it first, which is backwards. A tarball rather than `npm link`, so the app keeps
+one React and the exports map gets exercised too.
+
+### Note on bundle size
+
+`index` moved 16 → 17 KB and that is the last raise. The next release that would exceed it splits
+interaction tracking behind `react-render-detective/interactions` instead — a breaking change, and
+therefore a scheduled one. See [docs/BUNDLE-SIZE.md](docs/BUNDLE-SIZE.md).
+
 ## 0.4.0
 
 ### Added — triage, interactions, and a regression gate
