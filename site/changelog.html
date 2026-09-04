@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Changelog — React Render Detective</title>
+<meta name="description" content="Every release of react-render-detective, what changed and why.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>">
+<style>
+  :root {
+    --bg:#fff; --bg-soft:#f6f7f9; --text:#16181d; --muted:#5b6472; --line:#e3e6ea; --accent:#2f6df6;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#0c0e12; --bg-soft:#14171d; --text:#e6e9ee; --muted:#98a2b3; --line:#232833; --accent:#6f9bff;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.65}
+  a{color:var(--accent)}
+  .wrap{max-width:820px;margin:0 auto;padding:0 24px}
+  header{padding:56px 0 24px;border-bottom:1px solid var(--line)}
+  .eyebrow{font-family:var(--mono);font-size:13px;color:var(--muted)}
+  h1{font-size:clamp(30px,5vw,42px);margin:12px 0 8px;letter-spacing:-.02em}
+  .lede{color:var(--muted);margin:0 0 20px;max-width:56ch}
+  .release{padding:36px 0;border-bottom:1px solid var(--line)}
+  h2{font-size:24px;margin:0 0 4px;letter-spacing:-.01em}
+  h2 .anchor{color:var(--line);text-decoration:none;font-size:16px}
+  h2:hover .anchor{color:var(--accent)}
+  h3{font-size:15px;margin:24px 0 6px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  p{margin:10px 0}
+  code{font-family:var(--mono);font-size:.9em;background:var(--bg-soft);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+  ul{padding-left:20px} li{margin:6px 0}
+  table{width:100%;border-collapse:collapse;font-size:14.5px;margin:14px 0}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-size:13px}
+  footer{padding:32px 0 64px;color:var(--muted);font-size:14px}
+  footer a{color:var(--muted)}
+  nav{display:flex;gap:14px;font-size:14px;margin-top:14px}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="eyebrow">react-render-detective</div>
+    <h1>Changelog</h1>
+    <p class="lede">Every release, what changed and why — including the mistakes, because the reasoning is
+    the part worth reading when you are deciding whether to upgrade.</p>
+    <nav>
+      <a href="./">Overview</a>
+      <a href="https://github.com/shubambhasin/react-render-detective">GitHub</a>
+      <a href="https://www.npmjs.com/package/react-render-detective">npm</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<section class="release">
+  <h2 id="v0.4.0">0.4.0 <a class="anchor" href="#v0.4.0">#</a></h2>
+  <h3>Added — triage, interactions, and a regression gate</h3>
+<p><strong><code>printOpportunities()</code> — where to spend your next hour.</strong> Components ranked by estimated recoverable time rather than render count, because a component rendering 2 000 times for 0.01ms is not the problem and one rendering 40 times for 12ms might be. Remounts are charged at the cost of a mount. Built on the diagnostic engine, so a ranking and a diagnosis can never disagree.</p>
+<p><strong>Interaction and INP attribution.</strong> The browser reports how long an interaction took; the render events say which components spent it. Captured automatically through the Event Timing API for anything over one frame, with <code>measureInteraction(label, fn)</code> for the two cases the automatic path cannot see — Safari before 16.4, and synthetic input, which never produces those entries.</p>
+<p>A manual measurement waits for the next frame, and a hidden or throttled tab can stretch that to hundreds of milliseconds of idling. Measuring in a real browser showed exactly that — a 12ms click reported as 922ms — so the summary now separates handler time from render time and says plainly when the window was mostly the page waiting, rather than presenting idle time as your problem.</p>
+<p><strong><code>react-render-detective/testing</code> — a render regression gate.</strong> Snapshot renders, remounts and avoidable renders for a scripted interaction, commit the baseline, and fail the pull request when it regresses. Assertion-library agnostic: <code>compareProfiles</code> returns data, <code>assertNoRenderRegressions</code> throws. Improvements never fail the build but are reported with a nudge to re-baseline.</p>
+<h3>Fixed</h3>
+<ul><li><code>measureInteraction</code> relied on <code>requestAnimationFrame</code>, which does not fire in a hidden tab and</li></ul>
+<p>does not exist in jsdom — an interaction would simply never have been recorded. A timer now races it, whichever fires first.</p>
+</section>
+<section class="release">
+  <h2 id="v0.3.0">0.3.0 <a class="anchor" href="#v0.3.0">#</a></h2>
+  <h3>Added — remount detection</h3>
+<p>A remount is not a render: React throws the instance away, along with its DOM and all of its state, and builds a new one. It costs more than any re-render, and the two most common causes are silent.</p>
+<ul><li>Components rebuilt rather than re-rendered are now counted (<code>remountCount</code>) and reported, with the</li></ul>
+<p>cause named: a component <strong>declared inside another component's render body</strong>, or a <strong>changing <code>key</code></strong>.</p>
+<ul><li>The inline-definition case is answered *statically by the build plugin*, which passes</li></ul>
+<p><code>declaredInRender</code>. A first attempt inferred it at runtime by timing repeated definitions, and it broke as soon as a user clicked more than five seconds apart — the compiler already knows the answer, so it tells the runtime instead of the runtime guessing.</p>
+<ul><li>StrictMode's simulated unmount/remount is excluded: it reuses the same fiber, whereas a real</li></ul>
+<p>remount always produces a new instance. Without that, every component in a StrictMode app would be flagged.</p>
+<ul><li>Ordinary mounting is not flagged. A growing list mounts components; nothing is reported until a</li></ul>
+<p>component has actually been rebuilt repeatedly.</p>
+<ul><li>Surfaced in <code>explain()</code> (it outranks every render explanation), <code>printStats()</code> and the overlay.</li></ul>
+<h3>Fixed</h3>
+<ul><li>The build plugin skipped the entire body of any component it instrumented, so components declared</li></ul>
+<p><strong>inside</strong> another component — the exact case remount detection exists for — were never seen. <code>path.skip()</code> replaced with a processed-node guard.</p>
+<ul><li>The Vite plugin assumed Babel 8's ESM shape and would have failed for anyone on Babel 7.</li></ul>
+</section>
+<section class="release">
+  <h2 id="v0.2.0">0.2.0 <a class="anchor" href="#v0.2.0">#</a></h2>
+  <h3>Added — automatic instrumentation</h3>
+<p>A build-time transform that instruments every component in development, shipped as a Babel plugin (<code>react-render-detective/babel</code>) and a Vite plugin (<code>react-render-detective/vite</code>) that share one implementation.</p>
+<p>Wrapping components by hand only ever finds problems you already suspected. This turns the tool from a probe into a scanner, and it is also the only way to get <strong>source locations</strong> — React removed <code>_debugSource</code> in 19, so there is no runtime alternative. Diagnoses now read <code>TableRow   src/App.tsx:85:7</code>, and fix instructions name the file and line of the component that passes the unstable prop.</p>
+<ul><li>Instruments uppercase-named functions returning JSX, including arrow components and the function</li></ul>
+<p>inside <code>memo()</code> / <code>forwardRef()</code> — *inside*, so <code>memo</code> still compares props first.</p>
+<ul><li>Function declarations are instrumented by reassignment rather than rewritten to <code>const</code>, since</li></ul>
+<p>components are routinely used above their definition and a <code>const</code> would produce a temporal dead zone error.</p>
+<ul><li>Leaves alone: hooks, lowercase functions, functions that never return JSX, JSX from a nested</li></ul>
+<p>closure, hand-wrapped components, <code>node_modules</code>, and the detective's own runtime.</p>
+<ul><li><code>clientOnly</code> skips files without a <code>"use client"</code> directive, for the Next.js app router.</li><li><code>@babel/core</code> is an <strong>optional</strong> peer dependency and never reaches the browser; the runtime keeps</li></ul>
+<p>its zero-dependency guarantee, and the size gate now fails if build-time code leaks into a runtime entry.</p>
+<h3>Fixed</h3>
+<ul><li><code>withRenderDetective</code> returns an already-wrapped component unchanged instead of nesting. Found by</li></ul>
+<p>running the plugin against this repo's own example: it instrumented the detective's runtime, the wrapper rendered itself, and the app died with a stack overflow before first paint. The plugin now refuses to touch its own runtime, and the HOC refuses to wrap a wrapper.</p>
+</section>
+<section class="release">
+  <h2 id="v0.1.3">0.1.3 <a class="anchor" href="#v0.1.3">#</a></h2>
+  <p><strong>Use this version.</strong> It is the first release published by CI from a clean checkout, and the first whose metadata is correct.</p>
+<p><code>0.1.0</code>, <code>0.1.1</code> and <code>0.1.2</code> were all published from a local working tree, and none of them should be used:</p>
+<table><thead><tr><th>version</th><th>problem</th></tr></thead><tbody><tr><td><code>0.1.0</code></td><td>predates four render-attribution defects found by running the demo in a real browser</td></tr><tr><td><code>0.1.1</code></td><td><code>package.json</code> declares ~200 transitive dev packages as runtime dependencies; fails to install on Linux</td></tr><tr><td><code>0.1.2</code></td><td>same defect, 122 dependencies — published from the polluted tree before the guard existed</td></tr></tbody></table>
+<p>The cause was npm silently rewriting <code>package.json</code> while reifying a <code>node_modules</code> tree left out of sync by an earlier <code>--no-save</code> install. It happened three times, from three different npm commands, which is why releases no longer come from a local tree at all. See <a href="docs/RELEASING.md">docs/RELEASING.md</a>.</p>
+<p>Code is unchanged from <code>0.1.2</code>; only the release path and metadata differ.</p>
+</section>
+<section class="release">
+  <h2 id="v0.1.2">0.1.2 <a class="anchor" href="#v0.1.2">#</a></h2>
+  <p>Withdrawn — 122 spurious runtime dependencies. <code>0.1.1</code> shipped a broken <code>package.json</code>: a stray <code>npm install --package-lock-only</code> had written a <code>dependencies</code> block into it listing ~200 transitive dev packages as runtime dependencies of this package. Installing <code>0.1.1</code> therefore pulls in the whole dev toolchain, and fails outright on Linux because the darwin-only <code>fsevents</code> is among them. <code>0.1.2</code> is byte-identical in behaviour and declares what it actually needs: no dependencies, and <code>react</code> as its only peer.</p>
+<p><code>0.1.0</code> was published before the four defects below were found, and should also be avoided.</p>
+<p>Releases now come from CI on a tag, never from a local tree, and a publish guard (<code>scripts/verify-package.mjs</code>, wired to <code>prepublishOnly</code>) checks the packed tarball and refuses to publish a manifest that differs from the committed one. See <a href="docs/RELEASING.md">docs/RELEASING.md</a>.</p>
+</section>
+<section class="release">
+  <h2 id="v0.1.1">0.1.1 <a class="anchor" href="#v0.1.1">#</a></h2>
+  <p>Withdrawn — see above. Contents are otherwise the same as <code>0.1.2</code>.</p>
+<h3>Added</h3>
+<ul><li>Render tracking via <code>withRenderDetective</code>, <code>&lt;RenderDetective&gt;</code> and <code>useRenderDiagnostics</code>.</li><li>Prop comparison that separates a real value change from a <strong>reference-only</strong> change, using</li></ul>
+<p><code>Object.is</code> semantics and a bounded shallow compare.</p>
+<ul><li>Parent attribution: each commit is attributed to props, parent propagation, tracked context,</li></ul>
+<p>named state, or an origin at/below the component — never counted twice up the ancestor chain.</p>
+<ul><li>Profiler-based timings with self duration derived by subtracting instrumented descendants, and</li></ul>
+<p>labelled as the upper bound it is.</p>
+<ul><li>Confidence (<code>high</code> / <code>medium</code> / <code>low</code>) and printed limitations on every diagnosis.</li><li>StrictMode awareness: renders counted per commit, extra invocations reported as development</li></ul>
+<p>replays and excluded from statistics.</p>
+<ul><li><code>explain()</code> / <code>explainStructured()</code> — aggregated causality for one component.</li><li>Console reporter (concise and verbose) and a plain-DOM overlay rendered outside the React tree.</li><li><code>useTrackedState</code>, <code>useTrackedContextValue</code>, <code>useTrackedEffect</code> for what the runtime cannot see.</li><li>Filtering (<code>include</code> / <code>exclude</code>), per-instance sampling, bounded ring buffer, bounded inspection.</li><li>Zero runtime dependencies, ESM + CJS + types, <code>sideEffects: false</code>, three entry points.</li><li>Bundle-size budgets in CI and an instrumentation-overhead benchmark suite.</li></ul>
+<h3>Fixed before release</h3>
+<p>Found by running the demo dashboard in a real browser, which the jsdom test suite had not covered:</p>
+<ul><li><code>init()</code> recorded nothing under a Vite dev server. Dev detection asked "is this development?" and</li></ul>
+<p>answered *no* whenever <code>process</code> was absent — which is the case in a browser — so the documented quick-start turned the tool on and then stayed silent. It now asks the opposite question and only disables itself when it can positively see a production build, and says so if it does.</p>
+<ul><li>StrictMode's effect double-invoke wiped the recorded props on mount, so the first update of every</li></ul>
+<p>component reported <strong>every</strong> prop as newly added. Registry detach no longer clears props.</p>
+<ul><li><code>explain()</code> called reference-only prop changes "genuinely new values", and diluted every share by</li></ul>
+<p>counting mounts in the denominator — a prop responsible for 100% of a list row's updates read as 33%. Shares are now measured over updates, and the wording checks what is actually in the bucket.</p>
+<ul><li><code>explain()</code> said an unstable prop was "created in" the nearest instrumented ancestor. That is</li></ul>
+<p>where it *arrives from*; it now says so.</p>
+<ul><li>The example's Vite alias matched by prefix, rewriting <code>react-render-detective/overlay</code> to</li></ul>
+<p><code>src/index.ts/overlay</code> and breaking the demo on first run.</p>
+<h3>Verified</h3>
+<ul><li>React 18 and React 19, 74 tests each.</li><li>Packed tarball installed into a clean project: ESM, CJS and TypeScript consumers all resolve.</li></ul>
+<h3>Known limitations</h3>
+<p>See <a href="docs/FEASIBILITY.md">docs/FEASIBILITY.md</a>. Briefly: no source locations (needs a build-time transform), no automatic context-subscription map, no effect dependency analysis — each is impossible without private React internals, which this package does not use.</p>
+</section>
+</main>
+<footer>
+  <div class="wrap">Generated from <a href="https://github.com/shubambhasin/react-render-detective/blob/main/CHANGELOG.md">CHANGELOG.md</a> at deploy time.</div>
+</footer>
+</body>
+</html>

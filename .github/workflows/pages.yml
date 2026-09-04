@@ -3,7 +3,7 @@ name: Pages
 on:
   push:
     branches: [main]
-    paths: ["site/**", ".github/workflows/pages.yml"]
+    paths: ["site/**", "CHANGELOG.md", "scripts/changelog.mjs", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
 permissions:
@@ -23,6 +23,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      # Rendered at deploy time so the page can never drift from CHANGELOG.md.
+      - run: node scripts/changelog.mjs --html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

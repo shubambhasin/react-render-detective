@@ -56,6 +56,9 @@ jobs:
       - name: Bundle size budgets
         run: node scripts/size.mjs
 
+      - name: Changelog entry must exist
+        run: node scripts/changelog.mjs --check
+
       - name: Verify the package that will be published
         run: node scripts/verify-package.mjs
 

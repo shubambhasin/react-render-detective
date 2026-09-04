@@ -64,6 +64,32 @@ Create React App ignores project Babel config, so automatic instrumentation is u
 `craco` or ejecting. Those apps use manual `withRenderDetective` wrapping — which is worth testing
 directly, since it is what that (still large) population actually does.
 
+## The changelog
+
+Hand-written, deliberately. A generator turns *"the first attempt inferred this at runtime and broke
+the moment a user clicked more than five seconds apart"* into `fix: remount detection`, and the
+reasoning is the part someone deciding whether to upgrade actually needs. What is automated is the
+mechanics that kept going wrong:
+
+| command | does |
+| --- | --- |
+| `npm version <bump>` | inserts a `## <version>` skeleton **and** syncs the README and website version strings, all staged into the bump commit |
+| `npm run changelog:check` | fails if the current version has no entry, or the entry is near-empty |
+| `npm run changelog:html` | renders `site/changelog.html` |
+
+Three enforcement points, so an undocumented release is not possible by accident:
+
+1. `prepublishOnly` runs `changelog:check` — a local publish is blocked.
+2. The **Release** workflow runs it before publishing — a tagged release is blocked.
+3. The workflow already lifts that section into the GitHub Release notes, so the tag, the release
+   page and the file cannot disagree.
+
+The changelog is also **shipped in the tarball** (`files` includes it), so `npm view`, unpkg and an
+offline `node_modules` all carry it, and the publish guard requires it to be present.
+
+The website page is rendered **at deploy time** from `CHANGELOG.md`, so it can never drift:
+<https://shubambhasin.github.io/react-render-detective/changelog.html>
+
 ## Cutting a release
 
 ```bash
@@ -73,8 +99,8 @@ npm run use-local -- ../path/to/app
 # 1. Bump. Nothing else edits the version.
 npm version patch          # or minor / major
 
-# 2. Sync the version strings npm does not know about, and write the changelog.
-#    README status line · site/index.html status line · a new CHANGELOG section.
+# 2. `npm version` already inserted the CHANGELOG skeleton and synced the README
+#    and website strings. Fill the skeleton in — this is the only manual step.
 
 # 3. Sanity-check before committing (every tarball check runs; only the
 #    "manifest matches HEAD" check is relaxed, and it still fails on keys npm

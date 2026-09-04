@@ -25,6 +25,7 @@ const ALLOWED_PEERS = ["react", "@babel/core"];
 const REQUIRED_FILES = [
   "package/package.json",
   "package/README.md",
+  "package/CHANGELOG.md",
   "package/LICENSE",
   "package/dist/index.js",
   "package/dist/index.cjs",

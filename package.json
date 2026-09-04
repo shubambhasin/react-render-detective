@@ -30,6 +30,7 @@
   "files": [
     "dist",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "main": "./dist/index.cjs",
@@ -75,9 +76,12 @@
     "test:watch": "vitest",
     "size": "npm run build && node scripts/size.mjs",
     "bench": "node bench/run.mjs",
-    "prepublishOnly": "npm run build && node scripts/verify-package.mjs",
+    "prepublishOnly": "npm run build && node scripts/verify-package.mjs && node scripts/changelog.mjs --check",
     "verify": "node scripts/verify-package.mjs",
-    "use-local": "node scripts/use-local.mjs"
+    "use-local": "node scripts/use-local.mjs",
+    "changelog:check": "node scripts/changelog.mjs --check",
+    "changelog:html": "node scripts/changelog.mjs --html",
+    "version": "node scripts/changelog.mjs --start $npm_package_version && node scripts/sync-version.mjs && git add CHANGELOG.md README.md site/index.html"
   },
   "peerDependencies": {
     "react": ">=16.9.0",
