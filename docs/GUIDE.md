@@ -257,6 +257,106 @@ history rather than a series of gaps that would break prop diffing.
 
 ---
 
+## Where to spend your next hour
+
+Render counts answer the wrong question. A component rendering 2 000 times for 0.01ms is not your
+problem; one rendering 40 times for 12ms might be. `printOpportunities()` ranks by **estimated
+recoverable time**:
+
+```text
+React Render Detective — where to spend your next hour
+
+Ranked by estimated recoverable time. These are estimates, not promises:
+measure each fix.
+
+ 1. TableRow   src/App.tsx:85:7
+    ~9ms recoverable   20 avoidable renders   (confidence: high)
+    100% of updates followed `onSelect` changing by reference while its contents stayed the same.
+    → Trace `onSelect` back from ProductTable (src/App.tsx:110:1), which passes it to TableRow,
+      and stabilise it where it is created (useCallback, or hoist it out of the component).
+```
+
+Remounts are charged at the cost of a mount, since that is what React actually does. The ranking
+reuses the diagnostic engine rather than re-deriving anything, so a diagnosis and its ranking can
+never disagree.
+
+## Interactions and INP
+
+Performance is felt per interaction, and INP is the metric teams are judged on. This joins the two
+halves: the browser reports how long an interaction took, and the render events say which
+components spent it.
+
+```ts
+rrd.printInteractions();
+rrd.explainInteraction();      // the slowest recorded
+```
+
+```text
+open new-product modal: 0.5ms in the handler and 22.1ms rendering.
+
+Rendering inside this interaction
+  ProductTable              1 render(s)     9.1ms  props
+  TableRow                 20 render(s)     9.0ms  props
+
+Next step
+  Rendering dominates the real work; start with ProductTable.
+```
+
+Interactions are captured automatically through the Event Timing API, for anything slower than one
+frame (16ms). Two limits worth knowing:
+
+- **Safari before 16.4** does not support it.
+- **Synthetic input never produces these entries**, so a test harness records nothing.
+
+For both, measure explicitly:
+
+```ts
+rrd.measureInteraction("save invoice", () => saveButton.click());
+```
+
+The manual window waits for the next frame, which a hidden or throttled tab can stretch to
+hundreds of milliseconds of pure idling. When that happens the tool says so and reasons about the
+handler and render time instead — it will not present idle time as your problem.
+
+## Keeping it fixed — regression testing
+
+Fixing a render problem once is easy; keeping it fixed is the hard part. Record a profile for a
+scripted interaction, commit it, and fail the pull request when it regresses:
+
+```ts
+import { assertNoRenderRegressions } from "react-render-detective/testing";
+import baseline from "./baselines/search.json";
+
+test("typing in search does not cascade", async () => {
+  rrd.init({ enabled: true, mode: "silent" });
+  rrd.clear();
+
+  await userEvent.type(screen.getByRole("searchbox"), "widget");
+
+  assertNoRenderRegressions(baseline, rrd.getRenderProfile("type in search"), {
+    tolerance: 0.2,       // allow 20% drift
+    ignoreBelow: 3,       // ignore components that barely render
+    ignore: ["Icon"],
+  });
+});
+```
+
+It compares renders, remounts and avoidable renders per component:
+
+```text
+Render regressions in "type in search":
+
+  ProductTable  renders: 2 → 20  (+18)
+  ProductTable  avoidableRenders: 0 → 18  (+18)
+
+Each of these is a component doing more work than the baseline allows.
+```
+
+Improvements never fail the build, but they are reported with a nudge to re-baseline so they cannot
+silently regress later. Use `compareProfiles` when you want the data rather than an exception.
+
+Generate a baseline by running the scenario once and writing `getRenderProfile(name)` to disk.
+
 ## Remounts
 
 A remount is not a render. React discarded the component instance — its DOM, and all of its state —

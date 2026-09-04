@@ -97,6 +97,36 @@ Oldest → newest, bounded by `maxEvents`.
 Counts, totals, average/median/p95/p99/max self duration, slow renders, potentially avoidable
 renders, and a per-reason breakdown.
 
+### `getOpportunities(limit?): Opportunity[]` · `printOpportunities(limit?)`
+
+Components ranked by estimated recoverable time — avoidable render time plus remounts charged at
+the cost of a mount. The triage view.
+
+### `getInteractions(): InteractionRecord[]`
+### `explainInteraction(id?): string | undefined` · `explainInteractionStructured(id?)`
+### `printInteractions(limit?)`
+
+Interactions, slowest first, with the renders committed inside each. Captured through the Event
+Timing API for anything over 16ms.
+
+### `measureInteraction(label, action)`
+
+Times one interaction explicitly, up to the following frame. Needed where the automatic path cannot
+see: Safari before 16.4, and any synthetic input. Returns whatever `action` returns.
+
+### `getRenderProfile(scenario): RenderProfile`
+
+Snapshot of render behaviour for regression testing.
+
+## `react-render-detective/testing`
+
+### `compareProfiles(baseline, current, options?): RegressionResult`
+### `assertNoRenderRegressions(baseline, current, options?)`
+
+Compare renders, remounts and avoidable renders per component. Options: `tolerance`,
+`ignoreBelow`, `ignore`, `failOnImprovement`. See
+[GUIDE.md](GUIDE.md#keeping-it-fixed--regression-testing).
+
 ### `explain(componentName): string | undefined`
 
 The flagship answer, aggregated over recorded history: dominant cause, the props most often

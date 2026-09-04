@@ -25,6 +25,15 @@ Runtime dependencies: **none**. `react` is a peer dependency.
 Budgets are raised only by an explicit decision, recorded here. Raising one to make a red build go
 green is the failure mode this gate exists to prevent.
 
+**0.4.0 — `index` 13 → 16 KB.** Opportunity ranking, interaction attribution and the regression
+profile added ~3 KB gzip to the main entry. That is proportionate to three features, and `total`
+stayed at 20 KB with 17.11 KB measured.
+
+This is the second consecutive release to raise a budget, which is the pattern the gate exists to
+catch, so: **`total` does not move again.** If a future release would exceed 20 KB, the answer is
+splitting entry points so consumers pay only for what they import — `interactions` and
+`opportunities` are the obvious candidates — not another number change.
+
 **0.3.0 — `core` 8 → 9 KB, `index` 12 → 13 KB.** Remount detection pushed `core` to 8.14 KB and the
 gate failed the build. The growth is lifecycle tracking plus the diagnosis prose that names the
 cause and the fix, which is the feature. `total` stayed at 20 KB and the measured total moved

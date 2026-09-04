@@ -7,6 +7,7 @@ export default defineConfig({
     overlay: "src/overlay/index.ts",
     babel: "src/babel/index.ts",
     vite: "src/vite/index.ts",
+    testing: "src/testing/index.ts",
   },
   format: ["esm", "cjs"],
   dts: true,

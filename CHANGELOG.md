@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.4.0
+
+### Added — triage, interactions, and a regression gate
+
+**`printOpportunities()` — where to spend your next hour.** Components ranked by estimated
+recoverable time rather than render count, because a component rendering 2 000 times for 0.01ms is
+not the problem and one rendering 40 times for 12ms might be. Remounts are charged at the cost of a
+mount. Built on the diagnostic engine, so a ranking and a diagnosis can never disagree.
+
+**Interaction and INP attribution.** The browser reports how long an interaction took; the render
+events say which components spent it. Captured automatically through the Event Timing API for
+anything over one frame, with `measureInteraction(label, fn)` for the two cases the automatic path
+cannot see — Safari before 16.4, and synthetic input, which never produces those entries.
+
+A manual measurement waits for the next frame, and a hidden or throttled tab can stretch that to
+hundreds of milliseconds of idling. Measuring in a real browser showed exactly that — a 12ms click
+reported as 922ms — so the summary now separates handler time from render time and says plainly
+when the window was mostly the page waiting, rather than presenting idle time as your problem.
+
+**`react-render-detective/testing` — a render regression gate.** Snapshot renders, remounts and
+avoidable renders for a scripted interaction, commit the baseline, and fail the pull request when
+it regresses. Assertion-library agnostic: `compareProfiles` returns data, `assertNoRenderRegressions`
+throws. Improvements never fail the build but are reported with a nudge to re-baseline.
+
+### Fixed
+
+- `measureInteraction` relied on `requestAnimationFrame`, which does not fire in a hidden tab and
+  does not exist in jsdom — an interaction would simply never have been recorded. A timer now races
+  it, whichever fires first.
+
 ## 0.3.0
 
 ### Added — remount detection
