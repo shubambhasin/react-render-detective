@@ -33,7 +33,16 @@ export interface Lifecycle {
   unmounts: number;
   /** Mounts that followed an unmount of the same component. */
   remounts: number;
+  /** When the most recent remount was observed. */
+  lastRemountAt?: number;
 }
+
+/**
+ * Remounts of this many distinct components inside `RELOAD_WINDOW_MS` are a
+ * whole-tree rebuild — hot reload, or a route change — not a per-component bug.
+ */
+const RELOAD_COMPONENT_THRESHOLD = 3;
+const RELOAD_WINDOW_MS = 1500;
 
 interface DefinitionRecord {
   name: string;
@@ -245,7 +254,10 @@ export class Detective {
 
     const life = this.lifecycleFor(node.name);
     life.mounts++;
-    if (life.unmounts > 0) life.remounts++;
+    if (life.unmounts > 0) {
+      life.remounts++;
+      life.lastRemountAt = timestamp();
+    }
   }
 
   detach(node: NodeRecord): void {
@@ -307,6 +319,23 @@ export class Detective {
 
   lifecycleOf(name: string): Lifecycle {
     return this.lifecycles.get(name) ?? { mounts: 0, unmounts: 0, remounts: 0 };
+  }
+
+  /**
+   * Did a whole-tree rebuild just happen?
+   *
+   * Hot reload is the most common cause of remounts in development, and this
+   * tool only ever runs in development — so without this it would confidently
+   * blame a `key` every time React Fast Refresh replaced a module. A real key
+   * or inline-definition problem affects one component; a reload affects many
+   * at once.
+   */
+  private reloadSuspectedAt(at: number): boolean {
+    let names = 0;
+    for (const life of this.lifecycles.values()) {
+      if (life.lastRemountAt !== undefined && Math.abs(at - life.lastRemountAt) <= RELOAD_WINDOW_MS) names++;
+    }
+    return names >= RELOAD_COMPONENT_THRESHOLD;
   }
 
   /** Hot path. Must stay allocation-free and O(1). */
@@ -523,6 +552,7 @@ export class Detective {
         trackedState,
         remounts: this.lifecycleOf(node.name).remounts,
         inlineDefinitionSuspected: this.inlineDefinitionSuspected(node.name),
+        treeReloadSuspected: rec.phase === "mount" && this.reloadSuspectedAt(timestamp()),
         priorAvoidableRenders: node.stats.potentiallyAvoidableRenders,
       },
       this.config.thresholds,

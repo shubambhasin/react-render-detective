@@ -34,6 +34,8 @@ export interface DiagnosisInput {
   remounts: number;
   /** The component looks like it is declared inside another component's render body. */
   inlineDefinitionSuspected: boolean;
+  /** Many components remounted at once — a hot reload or a route change. */
+  treeReloadSuspected: boolean;
   selfDuration: number;
   attempts: number;
   committed: boolean;
@@ -85,6 +87,26 @@ function classify(input: DiagnosisInput): Diagnosis {
      * actually happened repeatedly, since mounting is also just what happens
      * when a list grows or a route changes.
      */
+    /*
+     * Hot reload rebuilds the tree, and this tool only runs in development, so
+     * this is the most frequent cause of remounts it will ever see. Blaming a
+     * `key` for it would be confidently wrong several times an hour.
+     */
+    if (input.remounts >= 2 && input.treeReloadSuspected && !input.inlineDefinitionSuspected) {
+      return make(
+        "mount",
+        "low",
+        `${input.componentName} was rebuilt along with several other components — most likely a hot reload or a route change.`,
+        [
+          `${input.componentName} has been remounted ${input.remounts}× in total.`,
+          "Several unrelated components remounted at the same moment, which is what a whole-tree rebuild looks like — React Fast Refresh replacing a module, or a route unmounting.",
+          "A per-component remount problem affects one component, not many at once.",
+        ],
+        false,
+        "Nothing to fix if this followed an edit or a navigation. Reload the page and repeat the interaction to measure without it.",
+      );
+    }
+
     if (input.remounts >= 2) {
       const inline = input.inlineDefinitionSuspected;
       return make(

@@ -19,6 +19,7 @@ const input = (over: Partial<DiagnosisInput> = {}): DiagnosisInput => ({
   trackedState: [],
   remounts: 0,
   inlineDefinitionSuspected: false,
+  treeReloadSuspected: false,
   selfDuration: 2,
   attempts: 1,
   committed: true,
@@ -46,6 +47,26 @@ describe("diagnostic accuracy fixtures", () => {
     expect(d.confidence).toBe("high");
     expect(d.potentiallyAvoidable).toBe(true);
     expect(d.summary).toContain("rebuilt, not re-rendered");
+    expect(d.suggestion).toContain("out of its parent's render body");
+  });
+
+  it("blames a hot reload, not the key, when many components remount together", () => {
+    // The tool is dev-only, so Fast Refresh is the most common remount cause it
+    // will ever see. Blaming `key` for it would be wrong several times an hour.
+    const d = diagnose(input({ phase: "mount", remounts: 20, treeReloadSuspected: true }), t);
+    expect(d.confidence).toBe("low");
+    expect(d.potentiallyAvoidable).toBe(false);
+    expect(d.summary).toContain("hot reload or a route change");
+    expect(d.suggestion).not.toContain("`key`");
+  });
+
+  it("still blames the inline definition even during a reload", () => {
+    // A component defined in a render body is a real bug regardless.
+    const d = diagnose(
+      input({ phase: "mount", remounts: 20, treeReloadSuspected: true, inlineDefinitionSuspected: true }),
+      t,
+    );
+    expect(d.confidence).toBe("high");
     expect(d.suggestion).toContain("out of its parent's render body");
   });
 

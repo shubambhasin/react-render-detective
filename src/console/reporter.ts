@@ -1,4 +1,6 @@
 import { formatInspected } from "../core/inspect.js";
+import { styled } from "./style.js";
+import type { Segment, Tone } from "./style.js";
 import type { Detective } from "../core/store.js";
 import type { PropChange, RenderEvent } from "../core/types.js";
 
@@ -123,41 +125,49 @@ function printBatch(batch: RenderEvent[], slowThreshold: number): void {
   const notable = [...byComponent.values()].filter((a) => a.avoidable > 0 || a.slow || a.remount);
   if (notable.length === 0) return;
 
-  const headline =
-    `[RRD] ${batch.length} render${batch.length === 1 ? "" : "s"} · ${totalMs.toFixed(1)}ms` +
-    (avoidable > 0 ? ` · ${avoidable} potentially avoidable` : "");
+  const ranked = [...notable].sort((a, b) => b.totalMs - a.totalMs);
+  const anySlow = ranked.some((a) => a.slow);
 
-  const worstSeverity = notable.some((a) => a.slow) ? "slow" : "monitor";
-  const log = worstSeverity === "slow" ? console.warn : console.log;
+  const segments: Segment[] = [
+    ["[RRD] ", "dim"],
+    [`${batch.length} render${batch.length === 1 ? "" : "s"}`, "strong"],
+    [` · ${totalMs.toFixed(1)}ms`, "dim"],
+  ];
+  if (avoidable > 0) segments.push([` · ${avoidable} potentially avoidable`, "warn"]);
 
-  const lines = notable
-    .sort((a, b) => b.totalMs - a.totalMs)
-    .slice(0, 8)
-    .map((a) => {
-      /*
-       * Show why the *actionable* renders happened. A batch containing 12 mounts
-       * and 12 avoidable updates would otherwise be labelled "mount", which is
-       * the half nobody can do anything about.
-       */
-      const source = a.notableReasons.size > 0 ? a.notableReasons : a.reasons;
-      const reason = [...source.entries()].sort((x, y) => y[1] - x[1])[0]?.[0] ?? "unknown";
-      const flags = [
-        a.remount ? "rebuilt" : undefined,
-        a.avoidable > 0 ? `${a.avoidable} avoidable` : undefined,
-      ].filter(Boolean);
-      return (
-        `  ${ICON[a.slow ? "slow" : "normal"]} ${a.name}${a.count > 1 ? ` ×${a.count}` : ""}`.padEnd(30) +
-        `${a.totalMs.toFixed(1)}ms  ${reason}${flags.length ? `  (${flags.join(", ")})` : ""}` +
-        (a.source ? `\n      ${a.source}` : "")
-      );
-    });
+  for (const a of ranked.slice(0, 8)) {
+    /*
+     * Show why the *actionable* renders happened. A batch containing 12 mounts
+     * and 12 avoidable updates would otherwise be labelled "mount", which is
+     * the half nobody can do anything about.
+     */
+    const reasonSource = a.notableReasons.size > 0 ? a.notableReasons : a.reasons;
+    const reason = [...reasonSource.entries()].sort((x, y) => y[1] - x[1])[0]?.[0] ?? "unknown";
 
-  const worst = notable.sort((a, b) => b.totalMs - a.totalMs)[0]?.worst;
-  const hint = worst?.diagnosis.suggestion
-    ? `  → ${worst.diagnosis.suggestion}`
-    : "  → rrd.printOpportunities() to rank everything by recoverable time";
+    // Worst-first: a rebuild costs more than a slow render, which costs more
+    // than an avoidable one.
+    const tone: Tone = a.remount ? "bad" : a.slow ? "warn" : a.avoidable > 0 ? "warn" : "good";
+    const label = `  ${ICON[a.slow ? "slow" : "normal"]} ${a.name}${a.count > 1 ? ` ×${a.count}` : ""}`;
 
-  log(`${headline}\n${lines.join("\n")}\n${hint}`);
+    segments.push("\n", [label.padEnd(30), tone], [`${a.totalMs.toFixed(1)}ms`, "plain"], [`  ${reason}`, "dim"]);
+    if (a.remount) segments.push(["  rebuilt", "bad"]);
+    if (a.avoidable > 0) segments.push([`  ${a.avoidable} avoidable`, "warn"]);
+    if (a.source) segments.push(["\n      " + a.source, "dim"]);
+  }
+
+  const worst = ranked[0]?.worst;
+  segments.push(
+    "\n",
+    [
+      worst?.diagnosis.suggestion
+        ? `  → ${worst.diagnosis.suggestion}`
+        : "  → rrd.printOpportunities() to rank everything by recoverable time",
+      "dim",
+    ],
+  );
+
+  const log = anySlow ? console.warn : console.log;
+  log(...styled(segments));
 }
 
 function printVerbose(event: RenderEvent): void {

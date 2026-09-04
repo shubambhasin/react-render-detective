@@ -72,9 +72,13 @@ describe("console output at real-app scale", () => {
     const rrdLines = log.mock.calls.map((c) => String(c[0])).filter((s) => s.includes("[RRD]"));
     // One line for the whole burst, not twelve.
     expect(rrdLines).toHaveLength(1);
-    const output = rrdLines[0] as string;
+    // Colour is applied via %c, so assert on the text with directives stripped —
+    // which is also what a reader sees if styling is unsupported or stripped.
+    const output = (rrdLines[0] as string).replace(/%c/g, "").replace(/%%/g, "%");
     expect(output).toContain("Row ×12");
     expect(output).toContain("props");
+    expect(output).toContain("12 avoidable");
+    expect(output).toContain("→");
     expect(output).toContain("12 avoidable");
     expect(output).toContain("→");
     log.mockRestore();
