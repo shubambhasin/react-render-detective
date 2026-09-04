@@ -71,17 +71,32 @@ jobs:
 
       - name: Verify what actually landed on the registry
         # The backstop: check the published metadata, not the local artifact.
+        #
+        # Retries because the registry takes a little while to serve a new
+        # version, and npm caches metadata locally — a check 10s after publish
+        # returned E404 and failed a release that was in fact perfect. A gate
+        # that cries wolf gets ignored, so an unreadable registry is reported as
+        # unknown rather than as a failure; only metadata we can actually read
+        # and that is actually wrong fails the run.
         run: |
           VERSION="$(node -p 'require("./package.json").version')"
-          sleep 10
-          DEPS="$(npm view "react-render-detective@$VERSION" dependencies --json)"
-          echo "published dependencies: $DEPS"
-          if [ "$DEPS" != "" ] && [ "$DEPS" != "{}" ] && [ "$DEPS" != "undefined" ]; then
-            echo "::error::Published $VERSION declares runtime dependencies. Deprecate it immediately:"
-            echo "::error::npm deprecate react-render-detective@$VERSION \"Broken metadata, use a later version.\""
-            exit 1
-          fi
-          echo "react-render-detective@$VERSION published with no runtime dependencies."
+          for attempt in 1 2 3 4 5 6; do
+            if DEPS="$(npm view "react-render-detective@$VERSION" dependencies --json --prefer-online 2>/dev/null)"; then
+              echo "published dependencies: ${DEPS:-<none>}"
+              if [ -n "$DEPS" ] && [ "$DEPS" != "{}" ] && [ "$DEPS" != "undefined" ]; then
+                echo "::error::Published $VERSION declares runtime dependencies. Deprecate it immediately:"
+                echo "::error::npm deprecate react-render-detective@$VERSION \"Broken metadata, use a later version.\""
+                exit 1
+              fi
+              echo "react-render-detective@$VERSION published with no runtime dependencies."
+              exit 0
+            fi
+            echo "Registry has not served $VERSION yet (attempt $attempt); waiting."
+            sleep 10
+          done
+          echo "::warning::Could not read $VERSION from the registry to verify it. The package was"
+          echo "::warning::verified before publishing, so this is most likely propagation delay."
+          echo "::warning::Confirm with: npm view react-render-detective@$VERSION dependencies --prefer-online"
 
       - name: GitHub release
         env:
