@@ -1,7 +1,7 @@
 {
   "name": "react-render-detective",
-  "version": "0.5.0",
-  "description": "Know WHY your React components render \u2014 not just that they did.",
+  "version": "0.6.0",
+  "description": "Know WHY your React components render — not just that they did.",
   "keywords": [
     "react",
     "render",
