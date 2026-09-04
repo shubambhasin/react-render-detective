@@ -257,6 +257,65 @@ history rather than a series of gaps that would break prop diffing.
 
 ---
 
+## Redux, Zustand and other external stores
+
+Without this, a store-driven render can only be reported as *"state or an external store"* — the
+tool proves the render started inside the component but cannot say which value caused it. On a real
+application that covered 84% of one component's renders, which is where it stopped being useful.
+
+`useSelector` is a public hook, so wrapping it needs no internals. The build plugin rewrites the
+call site for you:
+
+```ts
+// your code, unchanged
+const results = useSelector((state) => state.flights.results);
+```
+
+```text
+FlightList rendered because `flights.visible` returned a new reference with identical contents.
+
+  `flights.visible` (src/FlightList.tsx:8:3): [1, 2, 3] → [1, 2, 3]  — new reference, identical contents
+  useSelector compares with Object.is, so a selector that builds a new value each call re-renders
+  the component on every store update — not only when its data changes.
+
+Next step
+  Make `flights.visible` at src/FlightList.tsx:8:3 return a stable value: select the raw slice and
+  derive outside the selector, memoize it with createSelector, or pass an equality function such as
+  shallowEqual.
+
+Confidence: high
+```
+
+That second case is the one worth having: **a selector that builds a new array or object on every
+call**. `useSelector` compares with `Object.is`, so the component re-renders on *every* store
+update, whatever changed. It is invisible in a profiler and obvious here.
+
+Labels come from the selector itself where possible — `state => state.flights.results` becomes
+`flights.results`, which reads better than a file and line. Anything less obvious falls back to the
+call site.
+
+### Other stores, and no build plugin
+
+```ts
+import { createTrackedSelectorHook } from "react-render-detective";
+import { useStore } from "./my-zustand-store";
+
+export const useTrackedStore = createTrackedSelectorHook(useStore);
+```
+
+Or point the plugin at your own hook:
+
+```ts
+renderDetective({ storeHooks: { "my-zustand-store": ["useStore"] } })
+```
+
+Extra arguments pass straight through to the real hook — react-redux's equality function included —
+because changing them would change your app's behaviour. Set `trackStores: false` to turn the
+rewrite off.
+
+The same ownership rule as `useTrackedState` applies: a selector called in an uninstrumented
+descendant is not attributed to its instrumented ancestor.
+
 ## Where to spend your next hour
 
 Render counts answer the wrong question. A component rendering 2 000 times for 0.01ms is not your
@@ -281,6 +340,14 @@ reuses the diagnostic engine rather than re-deriving anything, so a diagnosis an
 never disagree.
 
 ## Interactions and INP
+
+> **Moved in 0.6.0.** These live in `react-render-detective/interactions` and are no longer started
+> by `init()`. Every consumer was paying for them whether or not they used them.
+>
+> ```ts
+> import { startInteractionTracking, printInteractions } from "react-render-detective/interactions";
+> startInteractionTracking();
+> ```
 
 Performance is felt per interaction, and INP is the metric teams are judged on. This joins the two
 halves: the browser reports how long an interaction took, and the render events say which

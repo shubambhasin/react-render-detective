@@ -8,6 +8,7 @@ export default defineConfig({
     babel: "src/babel/index.ts",
     vite: "src/vite/index.ts",
     testing: "src/testing/index.ts",
+    interactions: "src/interactions/index.ts",
   },
   format: ["esm", "cjs"],
   dts: true,

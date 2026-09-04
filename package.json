@@ -1,7 +1,7 @@
 {
   "name": "react-render-detective",
   "version": "0.5.0",
-  "description": "Know WHY your React components render — not just that they did.",
+  "description": "Know WHY your React components render \u2014 not just that they did.",
   "keywords": [
     "react",
     "render",
@@ -66,6 +66,11 @@
       "types": "./dist/testing.d.ts",
       "import": "./dist/testing.js",
       "require": "./dist/testing.cjs"
+    },
+    "./interactions": {
+      "types": "./dist/interactions.d.ts",
+      "import": "./dist/interactions.js",
+      "require": "./dist/interactions.cjs"
     },
     "./package.json": "./package.json"
   },

@@ -111,7 +111,7 @@ It answers **causality**, not counts:
 | Question | Answer |
 | --- | --- |
 | What rendered? | component, render number, mount vs update |
-| Why? | props · parent · context · state · external store — with the evidence |
+| Why? | props · parent · context · state · **which store selector** — with the evidence |
 | What changed? | per prop: value change vs *reference-only* change |
 | Where from? | the nearest instrumented ancestor, and whether it re-rendered |
 | How expensive? | subtree duration, and self duration with descendants subtracted |

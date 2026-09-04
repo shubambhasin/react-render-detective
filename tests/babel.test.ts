@@ -181,3 +181,72 @@ describe("declaredInRender", () => {
     expect(out).not.toContain("declaredInRender");
   });
 });
+
+describe("store hook tracking", () => {
+  it("wraps useSelector calls and derives a label from the selector", () => {
+    const out = compile(`
+      import { useSelector } from 'react-redux';
+      function Panel() {
+        const results = useSelector(state => state.flights.results);
+        return <div>{results.length}</div>;
+      }
+    `);
+    // `state => state.flights.results` reads far better than a file and line.
+    expect(out).toContain('name: "flights.results"');
+    expect(out).toMatch(/_rrdTrackSelector\(useSelector\(/);
+    expect(out).toMatch(/source: "src\/App\.tsx:\d+:\d+"/);
+  });
+
+  it("passes every argument through to the real hook untouched", () => {
+    // react-redux's equality function must reach useSelector, or behaviour changes.
+    const out = compile(`
+      import { useSelector, shallowEqual } from 'react-redux';
+      function Panel() {
+        const v = useSelector(s => s.a, shallowEqual);
+        return <i>{v}</i>;
+      }
+    `);
+    expect(out).toMatch(/useSelector\(s => s\.a, shallowEqual\)/);
+  });
+
+  it("falls back to the call site when no label can be derived", () => {
+    const out = compile(`
+      import { useSelector } from 'react-redux';
+      const pick = (s) => s.x.filter(Boolean);
+      function Panel() {
+        const v = useSelector(pick);
+        return <i>{v.length}</i>;
+      }
+    `);
+    // The component wrapper also carries a `name`, so assert on this call only:
+    // its options object must hold a source and nothing else.
+    expect(out).toMatch(/_rrdTrackSelector\(useSelector\(pick\), \{\s*source: "src\/App\.tsx:\d+:\d+"\s*\}\)/);
+  });
+
+  it("ignores identically-named hooks from other packages", () => {
+    const out = compile(`
+      import { useSelector } from 'some-other-lib';
+      function Panel() { const v = useSelector(s => s.a); return <i>{v}</i>; }
+    `);
+    expect(out).not.toContain("_rrdTrackSelector");
+  });
+
+  it("can be turned off, and can track a different store", () => {
+    const redux = `import { useSelector } from 'react-redux';
+      function Panel() { const v = useSelector(s => s.a); return <i>{v}</i>; }`;
+    expect(compile(redux, { trackStores: false })).not.toContain("_rrdTrackSelector");
+
+    const zustand = `import { useStore } from 'my-zustand-store';
+      function Panel() { const v = useStore(s => s.cart.items); return <i>{v.length}</i>; }`;
+    const out = compile(zustand, { storeHooks: { "my-zustand-store": ["useStore"] } });
+    expect(out).toContain('name: "cart.items"');
+  });
+
+  it("leaves a selector call outside any function alone", () => {
+    const out = compile(`
+      import { useSelector } from 'react-redux';
+      export const preloaded = useSelector;
+    `);
+    expect(out).not.toContain("_rrdTrackSelector");
+  });
+});

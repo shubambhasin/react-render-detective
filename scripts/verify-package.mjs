@@ -36,6 +36,7 @@ const REQUIRED_FILES = [
   "package/dist/babel.cjs",
   "package/dist/vite.js",
   "package/dist/testing.js",
+  "package/dist/interactions.js",
   "package/dist/testing.cjs",
 ];
 /** Anything matching these must never reach the registry. */

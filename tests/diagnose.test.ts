@@ -17,6 +17,7 @@ const input = (over: Partial<DiagnosisInput> = {}): DiagnosisInput => ({
   changedProps: [],
   contextChanges: [],
   trackedState: [],
+  selectorChanges: [],
   remounts: 0,
   inlineDefinitionSuspected: false,
   treeReloadSuspected: false,

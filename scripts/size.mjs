@@ -14,15 +14,20 @@ const baselinePath = join(root, ".size-baseline.json");
  * Budgets in bytes, gzipped, measured minified (see docs/BUNDLE-SIZE.md for how
  * these were set and where they differ from the original targets).
  *
+ * Each entry is measured *with* the shared chunks it imports, so the per-entry
+ * numbers overlap and do not sum. `total` is deduplicated, and is the figure
+ * that answers "what does everything cost".
+ *
  *   core    collection + comparison + the diagnostic engine
  *   index   core + React integration + console reporter
  *   overlay the dev inspector, lazily imported
  *   total   everything, i.e. the full developer experience
  */
 const BUDGETS = {
-  core: 9 * 1024,
+  core: 10 * 1024,
   index: 17 * 1024,
   overlay: 30 * 1024,
+  interactions: 12 * 1024,
   total: 20 * 1024,
 };
 
@@ -63,7 +68,7 @@ if (!existsSync(dist)) {
   process.exit(1);
 }
 
-const entries = ["core", "index", "overlay"];
+const entries = ["core", "index", "overlay", "interactions"];
 const results = {};
 let failed = false;
 

@@ -253,6 +253,8 @@ function label(event: RenderEvent): string {
       return "context update";
     case "state":
       return "state changed";
+    case "store":
+      return "store update";
     case "state-or-external":
       return "state or external store";
     case "unknown":

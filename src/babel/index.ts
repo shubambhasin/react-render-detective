@@ -28,13 +28,27 @@ export interface RenderDetectivePluginOptions {
   importSource?: string;
   /** Root used to make source locations relative. Defaults to `process.cwd()`. */
   root?: string;
+  /**
+   * Attribute external-store renders by wrapping store hooks at their call site.
+   * Defaults to `true`. Without it, a Redux-driven render can only be reported
+   * as "state or an external store".
+   */
+  trackStores?: boolean;
+  /**
+   * Which hooks to wrap, as `package` → hook names. Defaults to react-redux's
+   * `useSelector`. Add your own store's hook here.
+   */
+  storeHooks?: Record<string, string[]>;
 }
 
 interface State extends PluginPass {
   opts: RenderDetectivePluginOptions;
   rrdLocal?: BabelTypes.Identifier;
+  rrdTrackSelectorLocal?: BabelTypes.Identifier;
   rrdTouched?: boolean;
   rrdRelativePath?: string;
+  /** Local names bound to a tracked store hook in this file. */
+  rrdStoreHooks?: Set<string>;
 }
 
 const DEFAULT_IMPORT_SOURCE = "react-render-detective";
@@ -50,6 +64,10 @@ const DEFAULT_IMPORT_SOURCE = "react-render-detective";
  */
 const SELF_PATTERN = /[/\\]react-render-detective[/\\](src|dist)[/\\]/;
 const HOC_NAMES = new Set(["memo", "forwardRef"]);
+
+const DEFAULT_STORE_HOOKS: Record<string, string[]> = {
+  "react-redux": ["useSelector"],
+};
 
 export default function renderDetectiveBabelPlugin(
   api: { types: typeof BabelTypes; assertVersion?: (v: number | string) => void },
@@ -122,6 +140,44 @@ export default function renderDetectiveBabelPlugin(
     return local;
   }
 
+  function ensureSelectorImport(path: NodePath, state: State): BabelTypes.Identifier {
+    if (state.rrdTrackSelectorLocal) return state.rrdTrackSelectorLocal;
+    const program = path.findParent((p) => p.isProgram()) as NodePath<BabelTypes.Program>;
+    const local = program.scope.generateUidIdentifier("rrdTrackSelector");
+    const source = state.opts.importSource ?? DEFAULT_IMPORT_SOURCE;
+    program.unshiftContainer(
+      "body",
+      t.importDeclaration([t.importSpecifier(local, t.identifier("trackSelector"))], t.stringLiteral(source)),
+    );
+    state.rrdTrackSelectorLocal = local;
+    return local;
+  }
+
+  /**
+   * Derives a readable label from the selector expression.
+   *
+   * `state => state.flights.results` becomes `flights.results`, which is far
+   * more useful in a diagnosis than a file and line. Anything less obvious
+   * falls back to the call site.
+   */
+  function labelForSelector(argument: BabelTypes.Node | undefined): string | undefined {
+    if (!argument) return undefined;
+    if (!t.isArrowFunctionExpression(argument) && !t.isFunctionExpression(argument)) return undefined;
+    const body = t.isBlockStatement(argument.body) ? undefined : argument.body;
+    if (!body || !t.isMemberExpression(body)) return undefined;
+
+    const parts: string[] = [];
+    let current: BabelTypes.Node = body;
+    while (t.isMemberExpression(current)) {
+      if (t.isIdentifier(current.property)) parts.unshift(current.property.name);
+      else if (t.isStringLiteral(current.property)) parts.unshift(current.property.value);
+      else return undefined;
+      current = current.object;
+    }
+    // Drop the state parameter itself: `state.a.b` → `a.b`.
+    return t.isIdentifier(current) && parts.length > 0 ? parts.join(".") : undefined;
+  }
+
   function locationOf(node: BabelTypes.Node, state: State): string | undefined {
     const line = node.loc?.start.line;
     if (line === undefined || !state.rrdRelativePath) return undefined;
@@ -192,6 +248,50 @@ export default function renderDetectiveBabelPlugin(
 
           if (skip) path.skip();
         },
+      },
+
+      /** Records which local names are bound to a tracked store hook. */
+      ImportDeclaration(path: NodePath<BabelTypes.ImportDeclaration>, state: State) {
+        if (state.opts.trackStores === false) return;
+        const hooks = state.opts.storeHooks ?? DEFAULT_STORE_HOOKS;
+        const wanted = hooks[path.node.source.value];
+        if (!wanted) return;
+        for (const specifier of path.node.specifiers) {
+          if (!t.isImportSpecifier(specifier)) continue;
+          const imported = t.isIdentifier(specifier.imported) ? specifier.imported.name : specifier.imported.value;
+          if (wanted.includes(imported)) (state.rrdStoreHooks ??= new Set()).add(specifier.local.name);
+        }
+      },
+
+      /**
+       * `useSelector(fn)` → `_rrdTrackSelector(useSelector(fn), { name, source })`
+       *
+       * The call is wrapped rather than the import replaced, so every argument —
+       * including react-redux's equality function — reaches the real hook
+       * untouched. Changing those would change the app's behaviour.
+       */
+      CallExpression(path: NodePath<BabelTypes.CallExpression>, state: State) {
+        if (state.opts.trackStores === false) return;
+        if (!state.rrdStoreHooks || state.rrdStoreHooks.size === 0) return;
+        if (processed.has(path.node)) return;
+
+        const callee = path.node.callee;
+        if (!t.isIdentifier(callee) || !state.rrdStoreHooks.has(callee.name)) return;
+        // Not inside a component or hook body: nothing to attribute it to.
+        if (!path.getFunctionParent()) return;
+
+        processed.add(path.node);
+        const source = locationOf(path.node, state);
+        const label = labelForSelector(path.node.arguments[0] as BabelTypes.Node | undefined);
+
+        const options: BabelTypes.ObjectProperty[] = [];
+        if (label) options.push(t.objectProperty(t.identifier("name"), t.stringLiteral(label)));
+        if (source) options.push(t.objectProperty(t.identifier("source"), t.stringLiteral(source)));
+
+        state.rrdTouched = true;
+        path.replaceWith(
+          t.callExpression(ensureSelectorImport(path, state), [path.node, t.objectExpression(options)]),
+        );
       },
 
       /** `function Foo() { return <div /> }` */

@@ -25,6 +25,15 @@ Runtime dependencies: **none**. `react` is a peer dependency.
 Budgets are raised only by an explicit decision, recorded here. Raising one to make a red build go
 green is the failure mode this gate exists to prevent.
 
+**0.6.0 — split, as promised.** External-store attribution pushed `index` to 17.02 KB, 20 bytes over
+budget. Rather than raise it a fourth time, interaction tracking moved behind
+`react-render-detective/interactions` and `init()` no longer starts it. `index` fell to **15.21 KB**,
+and consumers who do not use INP attribution no longer pay for it.
+
+`interactions` is budgeted at 12 KB and `core` raised to 10 KB (store attribution genuinely grew the
+diagnostic engine). Note that per-entry figures include the shared chunks each entry imports, so
+they overlap and do not sum — `total` is deduplicated and stays capped at 20 KB.
+
 **0.5.0 — `index` 16 → 17 KB. The last raise.** Colouring and hot-reload-aware remount diagnosis
 pushed `index` to 16.48 KB. This is the third consecutive release to move this budget — 11 → 15 →
 16.5 KB — which is real drift, and `index` is the number that matters most, because it is what a

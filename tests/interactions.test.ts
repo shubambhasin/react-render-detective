@@ -23,6 +23,7 @@ const event = (over: Partial<RenderEvent> & { name: string; commitTime: number; 
     selfOriginated: false,
     contextChanges: [],
     trackedState: [],
+    selectorChanges: [],
     committed: true,
     attempts: 1,
     devReplay: false,

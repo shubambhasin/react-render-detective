@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.6.0
+
+### Added — external-store attribution
+
+The gap that mattered most. A Redux or Zustand render could only ever be reported as *"state or an
+external store"*: the tool proved the render started inside the component but could not say which
+value caused it. On a real 167k-line application that covered **84% of one component's renders**,
+which is where the product stopped being useful — and most React apps are store-driven apps.
+
+`useSelector` is a public hook from a public package, so this needs no React internals. The Babel
+plugin rewrites the call site, so nothing in your code changes:
+
+- selectors are named from the selector itself where possible — `state => state.flights.results`
+  becomes `flights.results`, which reads better than a file and line — and fall back to the call
+  site otherwise
+- the diagnosis reports `store` at **high** confidence, naming the selector and its location
+- **the case worth having**: a selector that builds a new array or object on every call. Because
+  `useSelector` compares with `Object.is`, the component then re-renders on *every* store update
+  regardless of what changed. Invisible in a profiler, obvious here — reported as avoidable, with
+  `createSelector` / `shallowEqual` / derive-outside as the suggested fixes.
+- every argument passes through to the real hook untouched, react-redux's equality function
+  included, because changing those would change your app's behaviour
+- `storeHooks` points it at any other store; `trackStores: false` turns it off
+- `createTrackedSelectorHook` covers custom hooks and bundlers the plugin cannot reach
+
+Attribution follows the same ownership rule as `useTrackedState`: a selector called in an
+uninstrumented descendant is not blamed on its instrumented ancestor.
+
+### Changed — BREAKING: interaction tracking moved to its own entry point
+
+```diff
+- rrd.printInteractions();
++ import { startInteractionTracking, printInteractions } from "react-render-detective/interactions";
++ startInteractionTracking();
+```
+
+`init()` no longer starts it. Store attribution pushed the root entry to 17.02 KB — 20 bytes over a
+budget that had already been raised three releases running — and 0.5.0 committed to splitting rather
+than raising a fourth time. The root entry is now **15.21 KB**, and consumers who do not use INP
+attribution no longer pay for it.
+
+`clear()` and `reset()` still work correctly across the split: the interactions module registers
+lifecycle hooks with the detective rather than the root entry knowing it exists.
+
 ## 0.5.0
 
 Everything here came out of pointing the tool at a real 167k-line application for the first time.

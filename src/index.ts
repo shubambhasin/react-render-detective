@@ -1,7 +1,5 @@
 import { attachConsoleReporter } from "./console/reporter.js";
 import { explainEvents, formatExplanation } from "./core/explain.js";
-import { formatInteraction, InteractionTracker, summarise } from "./core/interactions.js";
-import type { InteractionRecord, InteractionSummary } from "./core/interactions.js";
 import { formatOpportunities, rankOpportunities } from "./core/opportunities.js";
 import type { Opportunity } from "./core/opportunities.js";
 import { getDetective } from "./core/store.js";
@@ -16,14 +14,7 @@ import type {
 } from "./core/types.js";
 
 const REPORTER = Symbol.for("react-render-detective.reporter");
-const INTERACTIONS = Symbol.for("react-render-detective.interactions");
-type Global = typeof globalThis & { [REPORTER]?: () => void; [INTERACTIONS]?: InteractionTracker };
-
-function tracker(): InteractionTracker {
-  const g = globalThis as Global;
-  if (!g[INTERACTIONS]) g[INTERACTIONS] = new InteractionTracker();
-  return g[INTERACTIONS] as InteractionTracker;
-}
+type Global = typeof globalThis & { [REPORTER]?: () => void };
 
 /**
  * Enable diagnostics. Safe to call repeatedly — Fast Refresh, duplicate module
@@ -37,11 +28,6 @@ export function init(options: DetectiveOptions = {}): void {
   const g = globalThis as Global;
   g[REPORTER]?.();
   g[REPORTER] = undefined;
-
-  if (detective.enabled) {
-    // Browsers without `event` timing simply report no interactions.
-    tracker().start();
-  }
 
   if (detective.enabled && detective.config.mode !== "silent") {
     g[REPORTER] = attachConsoleReporter(detective);
@@ -88,7 +74,6 @@ export function subscribe(listener: (event: RenderEvent) => void): () => void {
 /** Clears recorded events and statistics; instrumentation stays attached. */
 export function clear(): void {
   getDetective().clear();
-  tracker().clear();
 }
 
 /** Full teardown, including configuration. Mainly for tests and HMR disposal. */
@@ -96,8 +81,6 @@ export function reset(): void {
   const g = globalThis as Global;
   g[REPORTER]?.();
   g[REPORTER] = undefined;
-  g[INTERACTIONS]?.stop();
-  g[INTERACTIONS] = undefined;
   getDetective().reset();
 }
 
@@ -120,54 +103,6 @@ export function getRenderProfile(scenario: string): RenderProfile {
   const remounts: Record<string, number> = {};
   for (const stats of getDetective().getComponentStats()) remounts[stats.name] = stats.remountCount;
   return profileFromEvents(scenario, getEvents(), remounts);
-}
-
-/**
- * Interactions, slowest first, with the renders that happened inside each.
- *
- * This is the bridge from render causality to what a user actually feels: the
- * browser reports how long the interaction took, and the render events say
- * which components spent that time and why.
- */
-export function getInteractions(): InteractionRecord[] {
-  return tracker().attribute(getEvents());
-}
-
-/** Structured analysis of one interaction. Defaults to the slowest recorded. */
-export function explainInteractionStructured(id?: string): InteractionSummary | undefined {
-  const records = getInteractions();
-  const record = id ? records.find((r) => r.id === id) : records[0];
-  return record ? summarise(record) : undefined;
-}
-
-export function explainInteraction(id?: string): string | undefined {
-  const summary = explainInteractionStructured(id);
-  return summary ? formatInteraction(summary) : undefined;
-}
-
-export function printInteractions(limit = 5): void {
-  const records = getInteractions().slice(0, limit);
-  if (records.length === 0) {
-    console.log(
-      tracker().automatic
-        ? "No interactions recorded yet. Event timing is working — nothing has taken longer than 16ms.\n" +
-            "Synthetic clicks from a test harness never produce these entries; use measureInteraction() there."
-        : "This browser does not report event timing (Safari before 16.4, jsdom).\n" +
-            "Use measureInteraction(label, fn) to time interactions by hand.",
-    );
-    return;
-  }
-  console.log(records.map((r) => formatInteraction(summarise(r))).join("\n\n"));
-}
-
-/**
- * Time one interaction explicitly, up to the paint that follows it.
- *
- * Needed wherever the automatic path cannot see: Safari before 16.4, and any
- * synthetic input, which never produces Event Timing entries.
- */
-export function measureInteraction<T>(label: string, action: () => T): T {
-  return tracker().measure(label, action);
 }
 
 /**
@@ -239,11 +174,6 @@ export const ReactRenderDetective = {
   explainStructured,
   getOpportunities,
   printOpportunities,
-  getInteractions,
-  explainInteraction,
-  explainInteractionStructured,
-  printInteractions,
-  measureInteraction,
   getRenderProfile,
   printStats,
 };
@@ -251,6 +181,8 @@ export const ReactRenderDetective = {
 export { withRenderDetective } from "./react/withRenderDetective.js";
 export { RenderDetective } from "./react/RenderDetective.js";
 export type { RenderDetectiveProps } from "./react/RenderDetective.js";
+export { trackSelector, createTrackedSelectorHook } from "./react/selector.js";
+export type { TrackSelectorOptions } from "./react/selector.js";
 export {
   useRenderDiagnostics,
   useTrackedState,
@@ -260,8 +192,6 @@ export {
 export type { TrackOptions } from "./react/instrument.js";
 export { explainEvents, formatExplanation } from "./core/explain.js";
 export { rankOpportunities, formatOpportunities } from "./core/opportunities.js";
-export { InteractionTracker, summarise as summariseInteraction, formatInteraction } from "./core/interactions.js";
-export type { InteractionRecord, InteractionSummary } from "./core/interactions.js";
 export type { Opportunity } from "./core/opportunities.js";
 export type { Explanation } from "./core/explain.js";
 export type * from "./core/types.js";

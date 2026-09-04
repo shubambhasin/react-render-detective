@@ -2,6 +2,7 @@ import { formatInspected } from "./inspect.js";
 import type {
   Confidence,
   ContextChange,
+  SelectorChange,
   TrackedStateChange,
   Diagnosis,
   PropChange,
@@ -30,6 +31,8 @@ export interface DiagnosisInput {
   contextChanges: ContextChange[];
   /** Named state updates from `useTrackedState`. Empty unless opted in. */
   trackedState: TrackedStateChange[];
+  /** External-store selector values that changed. Empty unless selectors are tracked. */
+  selectorChanges: SelectorChange[];
   /** How many times this component has been rebuilt rather than re-rendered. */
   remounts: number;
   /** The component looks like it is declared inside another component's render body. */
@@ -127,6 +130,53 @@ function classify(input: DiagnosisInput): Diagnosis {
       );
     }
     return make("mount", "high", `${input.componentName} mounted.`, ["First render of this instance."], false);
+  }
+
+  /*
+   * A tracked selector is direct evidence, so it outranks everything except a
+   * named local state update. Before this existed, a Redux-driven render could
+   * only ever be reported as "state or an external store" — which is where the
+   * tool stopped being useful on a real application, since that covers the
+   * majority of renders in most React codebases.
+   */
+  if (input.selectorChanges.length > 0) {
+    const changes = input.selectorChanges;
+    const unstable = changes.filter((c) => c.referenceOnly);
+    const names = changes.map((c) => c.name);
+
+    const evidence = changes.map(
+      (c) =>
+        `\`${c.name}\`${c.source ? ` (${c.source})` : ""}: ${formatInspected(c.previous)} → ${formatInspected(c.current)}` +
+        (c.referenceOnly ? "  — new reference, identical contents" : ""),
+    );
+
+    if (unstable.length > 0) {
+      /*
+       * The classic Redux performance bug: a selector that builds a new object
+       * or array on every call. `useSelector` compares with `Object.is`, so the
+       * component re-renders on *every* store update, whatever changed.
+       */
+      const worst = unstable[0] as SelectorChange;
+      evidence.push(
+        "useSelector compares with Object.is, so a selector that builds a new value each call re-renders the component on every store update — not only when its data changes.",
+      );
+      return make(
+        "store",
+        "high",
+        `${input.componentName} rendered because ${unstable.map((c) => `\`${c.name}\``).join(", ")} returned a new reference with identical contents.`,
+        evidence,
+        true,
+        `Make \`${worst.name}\`${worst.source ? ` at ${worst.source}` : ""} return a stable value: select the raw slice and derive outside the selector, memoize it with createSelector, or pass an equality function such as shallowEqual.`,
+      );
+    }
+
+    return make(
+      "store",
+      "high",
+      `${input.componentName} rendered because ${names.join(", ")} changed in the store.`,
+      [...evidence, "The values genuinely changed, so this render is doing real work."],
+      false,
+    );
   }
 
   if (input.trackedState.length > 0) {
@@ -227,7 +277,7 @@ function classify(input: DiagnosisInput): Diagnosis {
         input.selfRenderProven
           ? "An instrumented child re-rendered from above in this commit, which proves this component produced it."
           : "No instrumented descendant rendered in this commit, so an uninstrumented descendant could in principle be the origin instead.",
-        "React does not expose hook state without private internals, so the exact source is not observable. Use useTrackedState to name it.",
+        "React does not expose hook state without private internals, so the exact source is not observable. Use useTrackedState to name local state, and the build plugin's store tracking to name selectors.",
       ],
       false,
     );

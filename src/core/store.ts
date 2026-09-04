@@ -4,6 +4,7 @@ import { diagnose } from "./diagnose.js";
 import { RingBuffer } from "./ringBuffer.js";
 import type {
   AppStats,
+  SelectorChange,
   TrackedStateChange,
   ComponentInfo,
   ComponentStats,
@@ -60,6 +61,7 @@ const timestamp = (): number =>
   typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
 
 const EMPTY_STATE: TrackedStateChange[] = [];
+const EMPTY_SELECTORS: SelectorChange[] = [];
 const DURATION_SAMPLE = 200;
 const SWEEP_DELAY_MS = 250;
 
@@ -79,6 +81,8 @@ interface NodeRecord {
   attempts: number;
   /** Named state updates reported by `useTrackedState`, consumed at the next commit. */
   pendingState: TrackedStateChange[];
+  /** Selector value changes reported by tracked `useSelector`, consumed at the next commit. */
+  pendingSelectors: SelectorChange[];
   /** Set as soon as a commit is queued, so mount detection never waits on flush. */
   seenCommit: boolean;
   /** Has this instance ever been attached? Distinguishes a real mount from a StrictMode replay. */
@@ -123,6 +127,7 @@ interface PendingCommit {
    */
   props: Record<string, unknown> | undefined;
   state: TrackedStateChange[];
+  selectors: SelectorChange[];
   seq: number;
 }
 
@@ -130,6 +135,7 @@ const emptyReasons = (): Record<RenderReason, number> => ({
   mount: 0,
   props: 0,
   state: 0,
+  store: 0,
   parent: 0,
   context: 0,
   "state-or-external": 0,
@@ -141,6 +147,9 @@ export class Detective {
   private nodes = new Map<string, NodeRecord>();
   private events: RingBuffer<RenderEvent>;
   private listeners = new Set<(event: RenderEvent) => void>();
+  /** Registered by optional entry points so they follow clear()/reset() without being imported here. */
+  private clearHooks = new Set<() => void>();
+  private resetHooks = new Set<() => void>();
   private pending: PendingCommit[] = [];
   private contextChanges: Array<{ change: ContextChange; seq: number }> = [];
   /** Orders renders and context updates so they can be matched without timers. */
@@ -188,6 +197,14 @@ export class Detective {
     return this.config.enabled;
   }
 
+  registerClearHook(hook: () => void): void {
+    this.clearHooks.add(hook);
+  }
+
+  registerResetHook(hook: () => void): void {
+    this.resetHooks.add(hook);
+  }
+
   subscribe(listener: (event: RenderEvent) => void): () => void {
     this.listeners.add(listener);
     return () => {
@@ -214,6 +231,7 @@ export class Detective {
       sampled,
       attempts: 0,
       pendingState: [],
+      pendingSelectors: [],
       seenCommit: false,
       renderNumber: 0,
       lastCommitTime: -1,
@@ -348,6 +366,10 @@ export class Detective {
     if (node.pendingState.length < 16) node.pendingState.push(change);
   }
 
+  recordSelectorChange(node: NodeRecord, change: SelectorChange): void {
+    if (node.pendingSelectors.length < 16) node.pendingSelectors.push(change);
+  }
+
   /**
    * Hot path. Called from Profiler#onRender; only enqueues.
    *
@@ -362,12 +384,14 @@ export class Detective {
       attempts: node.attempts,
       props: node.pendingProps,
       state: node.pendingState.length > 0 ? node.pendingState : EMPTY_STATE,
+      selectors: node.pendingSelectors.length > 0 ? node.pendingSelectors : EMPTY_SELECTORS,
       seq: ++this.seq,
     });
     node.seenCommit = true;
     node.attempts = 0;
     node.pendingProps = undefined;
     if (node.pendingState.length > 0) node.pendingState = [];
+    if (node.pendingSelectors.length > 0) node.pendingSelectors = [];
     node.lastCommitTime = commit.commitTime;
     this.scheduleFlush();
   }
@@ -533,6 +557,7 @@ export class Detective {
     const selfDuration = Math.max(0, rec.subtreeDuration - accounted);
     const relevantContexts = contexts.filter((c) => c.commitTime === rec.commitTime);
     const trackedState = rec.state;
+    const selectorChanges = rec.selectors;
 
     node.renderNumber++;
     const diagnosis = diagnose(
@@ -550,6 +575,7 @@ export class Detective {
         attempts: rec.attempts,
         committed: true,
         trackedState,
+        selectorChanges,
         remounts: this.lifecycleOf(node.name).remounts,
         inlineDefinitionSuspected: this.inlineDefinitionSuspected(node.name),
         treeReloadSuspected: rec.phase === "mount" && this.reloadSuspectedAt(timestamp()),
@@ -589,6 +615,7 @@ export class Detective {
       selfOriginated: propsReevaluated === false,
       contextChanges: relevantContexts,
       trackedState,
+      selectorChanges,
       committed: true,
       attempts: Math.max(1, rec.attempts),
       devReplay: rec.attempts > 1,
@@ -673,6 +700,13 @@ export class Detective {
   }
 
   clear(): void {
+    for (const hook of this.clearHooks) {
+      try {
+        hook();
+      } catch {
+        /* ignore */
+      }
+    }
     this.events.clear();
     this.pending.length = 0;
     this.contextChanges.length = 0;
@@ -695,7 +729,16 @@ export class Detective {
 
   /** Full teardown — used by tests and by HMR disposal. */
   reset(): void {
+    for (const hook of this.resetHooks) {
+      try {
+        hook();
+      } catch {
+        /* ignore */
+      }
+    }
+    this.resetHooks.clear();
     this.clear();
+    this.clearHooks.clear();
     this.nodes.clear();
     this.lifecycles.clear();
     this.definitions.clear();

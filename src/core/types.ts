@@ -16,6 +16,8 @@ export type RenderReason =
   | "context"
   /** Proven local state update — only reported when `useTrackedState` named it. */
   | "state"
+  /** Proven external-store update — a tracked selector's value changed. */
+  | "store"
   | "state-or-external"
   | "unknown";
 
@@ -146,6 +148,8 @@ export interface RenderEvent {
   contextChanges: ContextChange[];
   /** State updates named via `useTrackedState`. */
   trackedState: TrackedStateChange[];
+  /** External-store selector values that changed, when tracked. */
+  selectorChanges: SelectorChange[];
   committed: boolean;
   /**
    * Render-function invocations for this commit. `> 1` means a development
@@ -240,6 +244,21 @@ export type DetectiveOptions = Partial<Omit<DetectiveConfig, "thresholds" | "ins
   thresholds?: Partial<Thresholds>;
   inspection?: Partial<InspectionLimits>;
 };
+
+export interface SelectorChange {
+  /** A readable label — the property path when it could be derived, else the call site. */
+  name: string;
+  /** `File.tsx:12:3` of the `useSelector` call, when the build plugin supplied it. */
+  source?: string;
+  /**
+   * The selector returned a value that is `Object.is`-different but shallow-equal
+   * to the previous one — it builds a new object or array on every call, so the
+   * component re-renders on *every* store update regardless of what changed.
+   */
+  referenceOnly: boolean;
+  previous: Inspected;
+  current: Inspected;
+}
 
 export interface TrackedStateChange {
   /** Label passed to `useTrackedState`. */

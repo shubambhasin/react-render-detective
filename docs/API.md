@@ -102,17 +102,35 @@ renders, and a per-reason breakdown.
 Components ranked by estimated recoverable time — avoidable render time plus remounts charged at
 the cost of a mount. The triage view.
 
+## `react-render-detective/interactions`
+
+Moved out of the root entry in 0.6.0, and no longer started by `init()`.
+
+### `startInteractionTracking(): boolean` · `stopInteractionTracking()`
+
+Begin capturing. Returns `false` where the browser cannot report event timing.
+
 ### `getInteractions(): InteractionRecord[]`
 ### `explainInteraction(id?): string | undefined` · `explainInteractionStructured(id?)`
 ### `printInteractions(limit?)`
 
-Interactions, slowest first, with the renders committed inside each. Captured through the Event
-Timing API for anything over 16ms.
+Interactions, slowest first, with the renders committed inside each.
 
 ### `measureInteraction(label, action)`
 
 Times one interaction explicitly, up to the following frame. Needed where the automatic path cannot
 see: Safari before 16.4, and any synthetic input. Returns whatever `action` returns.
+
+## Store attribution
+
+### `trackSelector(value, options?)`
+
+Records a store value and returns it untouched. The build plugin inserts this at `useSelector` call
+sites; call it directly inside a custom hook if you prefer.
+
+### `createTrackedSelectorHook(hook, options?)`
+
+Wraps a store hook. Signature-preserving — every argument reaches the real hook.
 
 ### `getRenderProfile(scenario): RenderProfile`
 
