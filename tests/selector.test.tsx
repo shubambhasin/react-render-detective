@@ -136,3 +136,50 @@ describe("external store attribution", () => {
     expect(event.selectorChanges.every((c) => c.name !== "user.id")).toBe(true);
   });
 });
+
+describe("explain and ranking for store-driven components", () => {
+  it("does not claim the cause is undetermined when it is a selector", async () => {
+    // The store reason had no branch in explain(), so a component whose renders
+    // were entirely store-driven was reported as "could not be determined
+    // reliably" — the opposite of the truth, since store is the highest
+    // confidence diagnosis produced.
+    const { explain, explainStructured, getEvents: readEvents, rankOpportunities } = await import("../src/index.js");
+    init({ enabled: true, mode: "silent" });
+    const tracked = createTrackedSelectorHook(useSelector, { name: "flights.derived", source: "src/D.tsx:4:1" });
+
+    const Derived = track("DerivedList", function DerivedList() {
+      const rows = tracked((s) => s.flights.results.map((n) => n * 2));
+      return <i>{rows.length}</i>;
+    });
+
+    render(<Derived />);
+    for (let i = 0; i < 4; i++) {
+      act(() => store.setState({ ...store.getState(), user: { id: 100 + i } }));
+    }
+
+    const structured = explainStructured("DerivedList");
+    expect(structured?.unstableSelectors[0]?.name).toBe("flights.derived");
+    expect(structured?.confidence).toBe("high");
+
+    const text = explain("DerivedList") as string;
+    expect(text).not.toContain("could not be determined reliably");
+    expect(text).toContain("flights.derived");
+    expect(text).toContain("every store update");
+    expect(text).toContain("src/D.tsx:4:1");
+
+    /*
+     * The ranking must carry the same advice rather than inheriting the old
+     * fallback. `minSavingMs: 0` because these test renders cost fractions of a
+     * millisecond, and the default noise floor correctly excludes them —
+     * getOpportunities() filtering this out is right, not a bug.
+     */
+    const ranked = rankOpportunities({
+      events: readEvents(),
+      lifecycles: new Map(),
+      minSavingMs: 0,
+    });
+    const top = ranked.find((o) => o.component === "DerivedList");
+    expect(top).toBeDefined();
+    expect(top?.nextStep).toContain("createSelector");
+  });
+});

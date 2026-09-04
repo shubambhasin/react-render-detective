@@ -13,6 +13,8 @@ export interface Explanation {
   breakdown: Array<{ reason: RenderReason; count: number; share: number }>;
   /** Props that most often changed by reference only, descending. */
   unstableProps: Array<{ key: string; count: number; share: number; valueType: string }>;
+  /** Store selectors that returned a new reference with identical contents. */
+  unstableSelectors: Array<{ name: string; source?: string; count: number; share: number }>;
   averageSelfDuration: number;
   totalSelfDuration: number;
   potentiallyAvoidableRenders: number;
@@ -49,6 +51,7 @@ export function explainEvents(
 
   const reasonCounts = new Map<RenderReason, number>();
   const unstable = new Map<string, { count: number; valueType: string }>();
+  const unstableSelector = new Map<string, { count: number; source?: string }>();
   let totalSelf = 0;
   let avoidable = 0;
   let avoidableTime = 0;
@@ -68,6 +71,12 @@ export function explainEvents(
       if (e.changedProps.some((c) => c.kind !== "reference")) propsWithNewValues++;
       else propsReferenceOnly++;
     }
+    for (const c of e.selectorChanges) {
+      if (!c.referenceOnly) continue;
+      const entry = unstableSelector.get(c.name) ?? { count: 0, source: c.source };
+      entry.count++;
+      unstableSelector.set(c.name, entry);
+    }
     for (const c of e.changedProps) {
       if (c.kind !== "reference") continue;
       const entry = unstable.get(c.key) ?? { count: 0, valueType: c.valueType };
@@ -80,6 +89,10 @@ export function explainEvents(
     .map(([reason, count]) => ({ reason, count, share: count / mine.length }))
     .sort((a, b) => b.count - a.count);
 
+  const unstableSelectors = [...unstableSelector.entries()]
+    .map(([name, v]) => ({ name, source: v.source, count: v.count, share: v.count / denominator }))
+    .sort((a, b) => b.count - a.count);
+
   const unstableProps = [...unstable.entries()]
     .map(([key, v]) => ({ key, count: v.count, share: v.count / denominator, valueType: v.valueType }))
     .sort((a, b) => b.count - a.count);
@@ -90,6 +103,7 @@ export function explainEvents(
     .map(([reason, count]) => ({ reason, count, share: count / denominator }))
     .sort((a, b) => b.count - a.count)[0];
   const topProp = unstableProps[0];
+  const topSelector = unstableSelectors[0];
   const latest = mine[mine.length - 1] as RenderEvent;
 
   let headline: string;
@@ -110,6 +124,18 @@ export function explainEvents(
       mountEvent?.diagnosis.suggestion ??
       `Check whether ${component} is declared inside another component's render body, or receives a changing \`key\`.`;
     confidence = mountEvent?.diagnosis.confidence ?? "medium";
+  } else if (topSelector && topSelector.share >= 0.5) {
+    /*
+     * Ranked above props: a selector rebuilding its value re-renders the
+     * component on *every* store update, so it is usually the larger cause.
+     */
+    headline =
+      `${pct(topSelector.share)} of updates followed the \`${topSelector.name}\` selector returning a new reference ` +
+      `with identical contents — so this re-renders on every store update, not only when its data changes.`;
+    nextStep =
+      `Make \`${topSelector.name}\`${topSelector.source ? ` at ${topSelector.source}` : ""} return a stable value: ` +
+      `select the raw slice and derive outside the selector, memoize with createSelector, or pass shallowEqual.`;
+    confidence = "high";
   } else if (topProp && topProp.share >= 0.5) {
     headline = `${pct(topProp.share)} of updates followed \`${topProp.key}\` changing by reference while its contents stayed the same.`;
     // `parent` is the nearest instrumented ancestor — where the prop arrives
@@ -130,6 +156,12 @@ export function explainEvents(
     headline = `${pct(top.share)} of updates followed a tracked context update.`;
     nextStep = "Check whether the provider's value is stable, and whether this component needs the whole context value.";
     confidence = "medium";
+  } else if (top && top.reason === "store") {
+    headline = `${pct(top.share)} of updates came from tracked store selectors whose values genuinely changed.`;
+    nextStep =
+      "These are real data changes. Look at what each render costs rather than how many there are, " +
+      "or select less per component so fewer components wake on each store update.";
+    confidence = "high";
   } else if (top && (top.reason === "state" || top.reason === "state-or-external")) {
     headline = `${pct(top.share)} of updates came from inside the component — state or an external store.`;
     nextStep =
@@ -170,6 +202,7 @@ export function explainEvents(
     unstableProps,
     averageSelfDuration: totalSelf / mine.length,
     totalSelfDuration: totalSelf,
+    unstableSelectors,
     potentiallyAvoidableRenders: avoidable,
     estimatedAvoidableTime: avoidableTime,
     devReplays: replays,
@@ -192,6 +225,13 @@ export function formatExplanation(e: Explanation): string {
     "Breakdown (share of all renders)",
     ...e.breakdown.map((b) => `  ${b.reason.padEnd(18)} ${String(b.count).padStart(5)}  ${pct(b.share)}`),
   ];
+
+  if (e.unstableSelectors.length > 0) {
+    lines.push("", "Selectors returning a new reference each call (share of updates)");
+    for (const sel of e.unstableSelectors) {
+      lines.push(`  ${sel.name.padEnd(24)} ${String(sel.count).padStart(5)}  ${pct(sel.share)}${sel.source ? `  ${sel.source}` : ""}`);
+    }
+  }
 
   if (e.unstableProps.length > 0) {
     lines.push("", "Reference-only prop changes (share of updates)");

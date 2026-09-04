@@ -28,6 +28,17 @@ plugin rewrites the call site, so nothing in your code changes:
 Attribution follows the same ownership rule as `useTrackedState`: a selector called in an
 uninstrumented descendant is not blamed on its instrumented ancestor.
 
+### Fixed — `explain()` no longer calls a store render undetermined
+
+`explain()` and `printOpportunities()` had no branch for the new `store` reason, so a component
+whose renders were entirely store-driven was reported as *"Cause could not be determined
+reliably"* — the exact opposite of the truth, since `store` is the highest-confidence diagnosis the
+engine produces. Found by checking rather than assuming, immediately after building the feature it
+broke.
+
+Selector churn now ranks **above** prop churn in the headline, because a selector rebuilding its
+value re-renders the component on every store update and is usually the larger cause.
+
 ### Changed — BREAKING: interaction tracking moved to its own entry point
 
 ```diff
