@@ -301,3 +301,54 @@ describe("labels for derived selectors", () => {
     expect(out).toContain('name: "catalogue.products"');
   });
 });
+
+describe("ordinary hook tracking", () => {
+  const hooked = `
+    import { useState, useMemo, useEffect } from 'react';
+    import { useInfiniteScroll } from './hooks';
+    function List() {
+      const [n, setN] = useState(0);
+      const scroll = useInfiniteScroll('flight');
+      const memoed = useMemo(() => n, [n]);
+      useEffect(() => {}, []);
+      return <i>{scroll.items}{memoed}</i>;
+    }`;
+
+  it("records a custom hook's value, with its name and call site", () => {
+    const out = compile(hooked, { trackHooks: true });
+    expect(out).toMatch(/_rrdTrackHook\(useInfiniteScroll\('flight'\)/);
+    expect(out).toContain('name: "useInfiniteScroll"');
+    expect(out).toMatch(/source: "src\/App\.tsx:\d+:\d+"/);
+  });
+
+  it("never wraps React's own hooks, whose values change every render by design", () => {
+    const out = compile(hooked, { trackHooks: true });
+    expect(out).not.toMatch(/_rrdTrackHook\(useState/);
+    expect(out).not.toMatch(/_rrdTrackHook\(useMemo/);
+    expect(out).not.toMatch(/_rrdTrackHook\(useEffect/);
+  });
+
+  it("skips hooks whose value is discarded", () => {
+    // A bare call has nothing worth recording.
+    const out = compile(
+      `import { useAnalytics } from './hooks';
+       function P() { useAnalytics(); return <i />; }`,
+      { trackHooks: true },
+    );
+    expect(out).not.toContain("_rrdTrackHook");
+  });
+
+  it("is off by default, since it is evidence rather than proof", () => {
+    expect(compile(hooked)).not.toContain("_rrdTrackHook");
+  });
+
+  it("honours ignoreHooks, and leaves store hooks to the selector path", () => {
+    expect(compile(hooked, { trackHooks: true, ignoreHooks: ["useInfiniteScroll"] })).not.toContain("_rrdTrackHook");
+
+    const store = `import { useSelector } from 'react-redux';
+      function P() { const v = useSelector(s => s.a.b); return <i>{v}</i>; }`;
+    const out = compile(store, { trackHooks: true });
+    expect(out).toContain("_rrdTrackSelector");
+    expect(out).not.toContain("_rrdTrackHook");
+  });
+});

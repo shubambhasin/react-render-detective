@@ -181,7 +181,7 @@ export const ReactRenderDetective = {
 export { withRenderDetective } from "./react/withRenderDetective.js";
 export { RenderDetective } from "./react/RenderDetective.js";
 export type { RenderDetectiveProps } from "./react/RenderDetective.js";
-export { trackSelector, createTrackedSelectorHook } from "./react/selector.js";
+export { trackSelector, trackHookValue, createTrackedSelectorHook } from "./react/selector.js";
 export type { TrackSelectorOptions } from "./react/selector.js";
 export {
   useRenderDiagnostics,

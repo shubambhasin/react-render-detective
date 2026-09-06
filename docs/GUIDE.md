@@ -328,6 +328,44 @@ rewrite off.
 The same ownership rule as `useTrackedState` applies: a selector called in an uninstrumented
 descendant is not attributed to its instrumented ancestor.
 
+## When the render starts inside the component
+
+`state-or-external` means the render began at the component, but the value behind it is not
+observable — React does not expose hook state without private internals. Turning on hook tracking
+narrows that from a shrug to a shortlist:
+
+```ts
+renderDetective({ trackHooks: true })
+```
+
+```text
+FlightList rendered from inside itself; `useInfiniteScroll` changed for this render.
+
+  No new props came from above: the wrapper did not re-render.
+  Hook values that changed for this render, and not on every render: `useInfiniteScroll`
+  (src/FlightList.jsx:87:12). These are candidates, not proof — only a store selector guarantees
+  that a changed value caused the render.
+  Ruled out: `useTranslation` — the value changes on every render, so it cannot explain why this
+  one happened.
+```
+
+### Why it is evidence and not a cause
+
+`useSelector` only re-renders when its value changes, so a selector change **implies** causation.
+No arbitrary hook offers that guarantee: a hook returning a fresh object on each render has changed,
+but it is a symptom of a render something else triggered. So hook values are reported as candidates,
+the diagnosis says so in as many words, and the reason stays `state-or-external`.
+
+The useful part is the discrimination. A value that changes on *every* render cannot explain why one
+particular render happened, and is ruled out explicitly — which is often what leaves a single
+candidate standing.
+
+React's own hooks are never wrapped: `useState` returns a new tuple every render, `useMemo` returns
+what you told it to, and `useEffect` returns nothing. Hooks whose result is discarded are skipped
+too. Use `ignoreHooks: ["useThing"]` to exclude more.
+
+Off by default — it adds a wrapper at every hook call site, and it is evidence rather than proof.
+
 ## Where to spend your next hour
 
 Render counts answer the wrong question. A component rendering 2 000 times for 0.01ms is not your

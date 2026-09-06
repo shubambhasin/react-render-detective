@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { createTrackedSelectorHook, getEvents, init, withRenderDetective } from "../src/index.js";
@@ -182,5 +182,45 @@ describe("explain and ranking for store-driven components", () => {
     const top = ranked.find((o) => o.component === "DerivedList");
     expect(top).toBeDefined();
     expect(top?.nextStep).toContain("createSelector");
+  });
+});
+
+describe("hook value evidence", () => {
+  it("names a hook that changed for this render, without claiming it caused it", async () => {
+    const { trackHookValue } = await import("../src/index.js");
+    init({ enabled: true, mode: "silent" });
+
+    let bump = () => {};
+    const Host = track("HookHost", function HookHost() {
+      const [n, setN] = useState(0);
+      bump = () => setN((v) => v + 1);
+      // Changes on some renders but not all — the shape of a real candidate.
+      const bucket = Math.floor(n / 2);
+      const occasional = trackHookValue(useMemo(() => ({ bucket }), [bucket]), { name: "useOccasional" });
+      // A fresh object every render — a symptom, never an explanation.
+      const always = trackHookValue({ t: n }, { name: "useAlways" });
+      return <i>{occasional.bucket}{always.t}</i>;
+    });
+
+    render(<Host />);
+    // Ends on a render where the bucket changed, so it is a live candidate.
+    for (let i = 0; i < 4; i++) act(() => bump());
+
+    const event = lastFor("HookHost") as RenderEvent;
+    expect(event.diagnosis.reason).toBe("state-or-external");
+
+    const names = event.hookChanges.map((h) => h.name);
+    expect(names).toContain("useOccasional");
+
+    const always = event.hookChanges.find((h) => h.name === "useAlways");
+    expect(always?.changesEveryRender).toBe(true);
+
+    const evidence = event.diagnosis.evidence.join(" ");
+    // Named as a candidate, explicitly not as proof.
+    expect(evidence).toContain("useOccasional");
+    expect(evidence).toContain("candidates, not proof");
+    // And the every-render value is ruled out rather than listed as a cause.
+    expect(evidence).toContain("Ruled out");
+    expect(evidence).toContain("cannot explain why this one happened");
   });
 });

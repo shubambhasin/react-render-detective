@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+### Added — hook tracking, for renders that start inside a component
+
+`state-or-external` was where the tool ran out of answers, and on a real application it covered 84%
+of one component's renders. `trackHooks: true` in the build plugin records the values ordinary
+hooks return, so the diagnosis can name what changed:
+
+```text
+FlightList rendered from inside itself; `useInfiniteScroll` changed for this render.
+  Ruled out: `useTranslation` — the value changes on every render, so it cannot explain why this
+  one happened.
+```
+
+**Reported as evidence, never as a cause.** `useSelector` only re-renders when its value changes, so
+a selector change implies causation; no arbitrary hook offers that guarantee, and a hook returning a
+fresh object each render is a symptom of a render something else triggered. The reason stays
+`state-or-external`, the wording says "candidates, not proof", and a separate `HookChange` type
+keeps the distinction in the data model rather than only in prose.
+
+The discrimination is the useful part: a value that changes on *every* render is ruled out
+explicitly, which often leaves one candidate standing.
+
+React's own hooks are never wrapped — `useState` returns a new tuple every render — and hooks whose
+result is discarded are skipped. Off by default.
+
 ## 0.6.1
 
 Four fixes, every one found by running the tool against a real application rather than a fixture.

@@ -128,6 +128,13 @@ see: Safari before 16.4, and any synthetic input. Returns whatever `action` retu
 Records a store value and returns it untouched. The build plugin inserts this at `useSelector` call
 sites; call it directly inside a custom hook if you prefer.
 
+### `trackHookValue(value, { name, source? })`
+
+Records a value returned by an ordinary hook and returns it untouched. Reported as **evidence** for
+a self-originated render, never as its cause — see
+[the guide](GUIDE.md#when-the-render-starts-inside-the-component). The build plugin inserts this at
+`use*` call sites when `trackHooks` is on.
+
 ### `createTrackedSelectorHook(hook, options?)`
 
 Wraps a store hook. Signature-preserving — every argument reaches the real hook.

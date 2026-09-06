@@ -24,6 +24,7 @@ const event = (over: Partial<RenderEvent> & { name: string; commitTime: number; 
     contextChanges: [],
     trackedState: [],
     selectorChanges: [],
+    hookChanges: [],
     committed: true,
     attempts: 1,
     devReplay: false,

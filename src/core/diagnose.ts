@@ -2,6 +2,7 @@ import { formatInspected } from "./inspect.js";
 import type {
   Confidence,
   ContextChange,
+  HookChange,
   SelectorChange,
   TrackedStateChange,
   Diagnosis,
@@ -33,6 +34,8 @@ export interface DiagnosisInput {
   trackedState: TrackedStateChange[];
   /** External-store selector values that changed. Empty unless selectors are tracked. */
   selectorChanges: SelectorChange[];
+  /** Hook values that changed. Evidence only — never treated as a cause. */
+  hookChanges: HookChange[];
   /** How many times this component has been rebuilt rather than re-rendered. */
   remounts: number;
   /** The component looks like it is declared inside another component's render body. */
@@ -268,18 +271,53 @@ function classify(input: DiagnosisInput): Diagnosis {
           : undefined,
       );
     }
+    /*
+     * Hook values narrow the search without claiming causation. Only a
+     * `useSelector`-style hook guarantees that a changed value *caused* the
+     * render; an arbitrary hook returning a fresh object has changed but may
+     * simply be a symptom of a render something else triggered.
+     */
+    const evidence = [
+      "No new props came from above: the wrapper did not re-render.",
+      input.selfRenderProven
+        ? "An instrumented child re-rendered from above in this commit, which proves this component produced it."
+        : "No instrumented descendant rendered in this commit, so an uninstrumented descendant could in principle be the origin instead.",
+    ];
+
+    const candidates = input.hookChanges.filter((h) => !h.changesEveryRender);
+    const alwaysChanging = input.hookChanges.filter((h) => h.changesEveryRender);
+
+    if (candidates.length > 0) {
+      evidence.push(
+        `Hook values that changed for this render, and not on every render: ${candidates
+          .map((h) => `\`${h.name}\`${h.source ? ` (${h.source})` : ""}`)
+          .join(", ")}. These are candidates, not proof — only a store selector guarantees that a changed value caused the render.`,
+      );
+    }
+    if (alwaysChanging.length > 0) {
+      evidence.push(
+        `Ruled out: ${alwaysChanging
+          .map((h) => `\`${h.name}\``)
+          .join(", ")} — the value changes on every render, so it cannot explain why this one happened.`,
+      );
+    }
+    if (input.hookChanges.length === 0) {
+      evidence.push(
+        "React does not expose hook state without private internals, so the exact source is not observable. Use useTrackedState to name local state, and the build plugin's hook and store tracking to narrow it further.",
+      );
+    }
+
     return make(
       "state-or-external",
       input.selfRenderProven ? "high" : "medium",
-      `${input.componentName} rendered from inside itself — local state, a store subscription, or a forced update.`,
-      [
-        "No new props came from above: the wrapper did not re-render.",
-        input.selfRenderProven
-          ? "An instrumented child re-rendered from above in this commit, which proves this component produced it."
-          : "No instrumented descendant rendered in this commit, so an uninstrumented descendant could in principle be the origin instead.",
-        "React does not expose hook state without private internals, so the exact source is not observable. Use useTrackedState to name local state, and the build plugin's store tracking to name selectors.",
-      ],
+      candidates.length > 0
+        ? `${input.componentName} rendered from inside itself; ${candidates.map((h) => `\`${h.name}\``).join(", ")} changed for this render.`
+        : `${input.componentName} rendered from inside itself — local state, a store subscription, or a forced update.`,
+      evidence,
       false,
+      candidates.length === 1
+        ? `Look at what ${candidates[0]?.name} does — it is the only value that changed for this render and not for every one.`
+        : undefined,
     );
   }
 

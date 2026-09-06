@@ -150,6 +150,8 @@ export interface RenderEvent {
   trackedState: TrackedStateChange[];
   /** External-store selector values that changed, when tracked. */
   selectorChanges: SelectorChange[];
+  /** Hook values that changed. Evidence for a self-originated render, never a cause. */
+  hookChanges: HookChange[];
   committed: boolean;
   /**
    * Render-function invocations for this commit. `> 1` means a development
@@ -256,6 +258,30 @@ export interface SelectorChange {
    * component re-renders on *every* store update regardless of what changed.
    */
   referenceOnly: boolean;
+  previous: Inspected;
+  current: Inspected;
+}
+
+/**
+ * A value returned by a hook that changed between renders.
+ *
+ * Deliberately **not** a `SelectorChange`. `useSelector` only re-renders when
+ * its value changes, so a selector change implies causation. No such guarantee
+ * exists for an arbitrary hook: a hook returning a fresh object has changed, but
+ * it may simply be a symptom of a render something else triggered. These are
+ * reported as evidence and never as a cause.
+ */
+export interface HookChange {
+  /** The hook's name, e.g. `useInfiniteScroll`. */
+  name: string;
+  source?: string;
+  /** New reference, identical shallow contents. */
+  referenceOnly: boolean;
+  /**
+   * The value changes on *every* render of this component, so it cannot explain
+   * why this particular render happened — it is a symptom, not a trigger.
+   */
+  changesEveryRender: boolean;
   previous: Inspected;
   current: Inspected;
 }

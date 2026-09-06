@@ -53,12 +53,21 @@ export interface RenderDetectivePluginOptions {
    * not wrapping at all.
    */
   storeHookNames?: string[];
+  /**
+   * Record values returned by ordinary `use*` hooks, so a render that starts
+   * inside a component can name what changed. Off by default: it is evidence
+   * rather than proof, and it adds a wrapper at every hook call site.
+   */
+  trackHooks?: boolean;
+  /** Hook names never to wrap, in addition to React's own. */
+  ignoreHooks?: string[];
 }
 
 interface State extends PluginPass {
   opts: RenderDetectivePluginOptions;
   rrdLocal?: BabelTypes.Identifier;
   rrdTrackSelectorLocal?: BabelTypes.Identifier;
+  rrdTrackHookLocal?: BabelTypes.Identifier;
   rrdTouched?: boolean;
   rrdRelativePath?: string;
   /** Local names bound to a tracked store hook in this file. */
@@ -82,6 +91,37 @@ const HOC_NAMES = new Set(["memo", "forwardRef"]);
 const DEFAULT_STORE_HOOKS: Record<string, string[]> = {
   "react-redux": ["useSelector"],
 };
+
+/*
+ * React's own hooks are never wrapped. `useState` returns a new tuple on every
+ * render, `useMemo` returns what you told it to — recording either would be
+ * noise, and `useEffect` returns nothing worth recording at all.
+ */
+const REACT_HOOKS = new Set([
+  "useState",
+  "useReducer",
+  "useEffect",
+  "useLayoutEffect",
+  "useInsertionEffect",
+  "useMemo",
+  "useCallback",
+  "useRef",
+  "useContext",
+  "useId",
+  "useTransition",
+  "useDeferredValue",
+  "useSyncExternalStore",
+  "useImperativeHandle",
+  "useDebugValue",
+  "useOptimistic",
+  "useActionState",
+  "useFormStatus",
+  // Ours.
+  "useTrackedState",
+  "useTrackedEffect",
+  "useTrackedContextValue",
+  "useRenderDiagnostics",
+]);
 
 export default function renderDetectiveBabelPlugin(
   api: { types: typeof BabelTypes; assertVersion?: (v: number | string) => void },
@@ -151,6 +191,19 @@ export default function renderDetectiveBabelPlugin(
       t.importDeclaration([t.importSpecifier(local, t.identifier("withRenderDetective"))], t.stringLiteral(source)),
     );
     state.rrdLocal = local;
+    return local;
+  }
+
+  function ensureHookImport(path: NodePath, state: State): BabelTypes.Identifier {
+    if (state.rrdTrackHookLocal) return state.rrdTrackHookLocal;
+    const program = path.findParent((p) => p.isProgram()) as NodePath<BabelTypes.Program>;
+    const local = program.scope.generateUidIdentifier("rrdTrackHook");
+    const source = state.opts.importSource ?? DEFAULT_IMPORT_SOURCE;
+    program.unshiftContainer(
+      "body",
+      t.importDeclaration([t.importSpecifier(local, t.identifier("trackHookValue"))], t.stringLiteral(source)),
+    );
+    state.rrdTrackHookLocal = local;
     return local;
   }
 
@@ -304,14 +357,39 @@ export default function renderDetectiveBabelPlugin(
        * untouched. Changing those would change the app's behaviour.
        */
       CallExpression(path: NodePath<BabelTypes.CallExpression>, state: State) {
-        if (state.opts.trackStores === false) return;
-        if (!state.rrdStoreHooks || state.rrdStoreHooks.size === 0) return;
         if (processed.has(path.node)) return;
-
         const callee = path.node.callee;
-        if (!t.isIdentifier(callee) || !state.rrdStoreHooks.has(callee.name)) return;
+        if (!t.isIdentifier(callee)) return;
         // Not inside a component or hook body: nothing to attribute it to.
         if (!path.getFunctionParent()) return;
+
+        const isStoreHook =
+          state.opts.trackStores !== false && state.rrdStoreHooks?.has(callee.name) === true;
+
+        if (!isStoreHook) {
+          /*
+           * An ordinary hook. Recorded only where its value is kept — a bare
+           * `useEffect(...)` has nothing worth recording — and never for React's
+           * own hooks, whose values change every render by design.
+           */
+          if (state.opts.trackHooks !== true) return;
+          if (!/^use[A-Z]/.test(callee.name)) return;
+          if (REACT_HOOKS.has(callee.name)) return;
+          if (state.opts.ignoreHooks?.includes(callee.name)) return;
+          if (!path.parentPath.isVariableDeclarator()) return;
+
+          processed.add(path.node);
+          const hookSource = locationOf(path.node, state);
+          const hookOptions: BabelTypes.ObjectProperty[] = [
+            t.objectProperty(t.identifier("name"), t.stringLiteral(callee.name)),
+          ];
+          if (hookSource) hookOptions.push(t.objectProperty(t.identifier("source"), t.stringLiteral(hookSource)));
+          state.rrdTouched = true;
+          path.replaceWith(
+            t.callExpression(ensureHookImport(path, state), [path.node, t.objectExpression(hookOptions)]),
+          );
+          return;
+        }
 
         processed.add(path.node);
         const source = locationOf(path.node, state);

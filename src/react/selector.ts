@@ -61,6 +61,46 @@ export function trackSelector<T>(value: T, options: TrackSelectorOptions = {}): 
 }
 
 /**
+ * Records a value returned by an ordinary hook, and returns it untouched.
+ *
+ * Separate from `trackSelector` on purpose. A store selector's change *causes*
+ * the render, because `useSelector` only re-renders when its value changes. An
+ * ordinary hook offers no such guarantee — a hook returning a fresh object has
+ * changed but may just be a symptom. These are recorded as evidence, and the
+ * diagnosis says so.
+ */
+export function trackHookValue<T>(value: T, options: TrackSelectorOptions & { name: string }): T {
+  const detective = getDetective();
+  const node = useContext(AncestryContext);
+  const previous = useRef<{ value: T } | undefined>(undefined);
+
+  if (!detective.enabled || !node) return value;
+
+  const prior = previous.current;
+  previous.current = { value };
+
+  try {
+    if (!prior || Object.is(prior.value, value)) {
+      // Still counted as seen, so "changes on every render" can be established.
+      detective.recordHookValue(node, options.name, options.source, undefined);
+      return value;
+    }
+    const equal = shallowEqual(prior.value, value, detective.config);
+    detective.recordHookValue(node, options.name, options.source, {
+      name: options.name,
+      source: options.source,
+      referenceOnly: equal === true,
+      previous: inspect(prior.value, detective.config.inspection),
+      current: inspect(value, detective.config.inspection),
+    });
+  } catch {
+    /* diagnostics must never break the app */
+  }
+
+  return value;
+}
+
+/**
  * Wraps a store hook so its results are attributed. Signature-preserving: extra
  * arguments (react-redux's equality function, for instance) pass straight
  * through, because changing them would change the app's behaviour.
