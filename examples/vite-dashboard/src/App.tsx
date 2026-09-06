@@ -1,6 +1,9 @@
 import { createContext, memo, useCallback, useContext, useMemo, useState } from "react";
 import { useTrackedContextValue, useTrackedState } from "react-render-detective";
+import { Provider } from "react-redux";
 import { CATEGORIES, queryProducts, type Product } from "./data";
+import { store } from "./store";
+import { HeartbeatButton, StableSelectorPanel, UnstableSelectorPanel } from "./StoreDemo";
 
 /* ------------------------------------------------------------------ context */
 
@@ -272,6 +275,7 @@ function FixedDashboard() {
 export function App() {
   const [fixed, setFixed] = useState(false);
   return (
+    <Provider store={store}>
     <SessionProvider>
       <div className="app">
         <div className="banner">
@@ -282,8 +286,14 @@ export function App() {
           </span>
           <button onClick={() => setFixed((f) => !f)}>Show {fixed ? "broken" : "fixed"} version</button>
         </div>
+        <div className="filters" style={{ padding: "10px 24px" }}>
+          <HeartbeatButton />
+          <UnstableSelectorPanel />
+          <StableSelectorPanel />
+        </div>
         {fixed ? <FixedDashboard /> : <Dashboard />}
       </div>
     </SessionProvider>
+    </Provider>
   );
 }

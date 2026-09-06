@@ -11,6 +11,21 @@ type ShallowResult = boolean | undefined;
 
 const EMPTY: Record<string, unknown> = {};
 
+/*
+ * Comparison bounds are deliberately far larger than the *inspection* bounds.
+ *
+ * Inspection builds a snapshot and must stay small — it allocates, and it is
+ * kept in the ring buffer. Comparison only runs `Object.is` over elements, costs
+ * microseconds even for a thousand of them, and happens in the deferred flush
+ * rather than on the render path.
+ *
+ * Conflating the two made the single most valuable diagnosis fail on ordinary
+ * data: a selector returning a 238-item array — a completely normal list — was
+ * reported as "too large to compare" and never flagged as unstable.
+ */
+const MAX_COMPARISON_ARRAY_LENGTH = 1000;
+const MAX_COMPARISON_OBJECT_KEYS = 100;
+
 export function diffProps(
   previous: Record<string, unknown> | undefined,
   current: Record<string, unknown> | undefined,
@@ -87,12 +102,10 @@ export function shallowEqual(a: unknown, b: unknown, config: DetectiveConfig): S
   if (Object.is(a, b)) return true;
   if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
 
-  const { maxObjectKeys, maxArrayLength } = config.inspection;
-
   if (Array.isArray(a) || Array.isArray(b)) {
     if (!Array.isArray(a) || !Array.isArray(b)) return false;
     if (a.length !== b.length) return false;
-    if (a.length > maxArrayLength) return undefined;
+    if (a.length > MAX_COMPARISON_ARRAY_LENGTH) return undefined;
     for (let i = 0; i < a.length; i++) if (!Object.is(a[i], b[i])) return false;
     return true;
   }
@@ -113,7 +126,7 @@ export function shallowEqual(a: unknown, b: unknown, config: DetectiveConfig): S
   const ka = Object.keys(a);
   const kb = Object.keys(b);
   if (ka.length !== kb.length) return false;
-  if (ka.length > maxObjectKeys) return undefined;
+  if (ka.length > MAX_COMPARISON_OBJECT_KEYS) return undefined;
   for (const k of ka) {
     if (!Object.prototype.hasOwnProperty.call(b, k)) return false;
     if (!Object.is(a[k], b[k])) return false;

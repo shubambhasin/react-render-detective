@@ -96,9 +96,26 @@ describe("diffProps", () => {
 });
 
 describe("shallowEqual", () => {
-  it("returns undefined rather than guessing on values too large to compare", () => {
-    const big = (v: number) => Object.fromEntries(Array.from({ length: 50 }, (_, i) => [`k${i}`, v]));
-    expect(shallowEqual(big(1), big(1), config)).toBeUndefined();
+  it("compares values of ordinary size, including lists a selector would derive", () => {
+    /*
+     * Comparison bounds are far larger than inspection bounds, and must be: a
+     * selector returning a 238-item array is completely ordinary, and treating
+     * it as "too large to compare" silently disabled the most valuable
+     * diagnosis the tool makes.
+     */
+    const list = (n: number) => Array.from({ length: n }, (_, i) => i);
+    expect(shallowEqual(list(238), list(238), config)).toBe(true);
+    expect(shallowEqual(list(238), [...list(237), 999], config)).toBe(false);
+
+    const wide = (v: number) => Object.fromEntries(Array.from({ length: 50 }, (_, i) => [`k${i}`, v]));
+    expect(shallowEqual(wide(1), wide(1), config)).toBe(true);
+  });
+
+  it("still declines to guess beyond what is cheap to compare", () => {
+    const huge = (v: number) => Array.from({ length: 1001 }, () => v);
+    expect(shallowEqual(huge(1), huge(1), config)).toBeUndefined();
+    const veryWide = (v: number) => Object.fromEntries(Array.from({ length: 101 }, (_, i) => [`k${i}`, v]));
+    expect(shallowEqual(veryWide(1), veryWide(1), config)).toBeUndefined();
   });
 
   it("returns undefined for class instances it cannot compare cheaply", () => {

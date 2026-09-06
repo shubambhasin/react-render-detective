@@ -178,10 +178,19 @@ export default function renderDetectiveBabelPlugin(
     if (!argument) return undefined;
     if (!t.isArrowFunctionExpression(argument) && !t.isFunctionExpression(argument)) return undefined;
     const body = t.isBlockStatement(argument.body) ? undefined : argument.body;
-    if (!body || !t.isMemberExpression(body)) return undefined;
+    if (!body) return undefined;
+
+    /*
+     * `state => state.a.b` gives `a.b`, and `state => state.a.b.filter(...)`
+     * gives `a.b` too — the derived-from path is what a developer recognises,
+     * and it is exactly the shape that produces an unstable selector.
+     */
+    let target: BabelTypes.Node = body;
+    if (t.isCallExpression(target) && t.isMemberExpression(target.callee)) target = target.callee.object;
+    if (!t.isMemberExpression(target)) return undefined;
 
     const parts: string[] = [];
-    let current: BabelTypes.Node = body;
+    let current: BabelTypes.Node = target;
     while (t.isMemberExpression(current)) {
       if (t.isIdentifier(current.property)) parts.unshift(current.property.name);
       else if (t.isStringLiteral(current.property)) parts.unshift(current.property.value);

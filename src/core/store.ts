@@ -367,7 +367,15 @@ export class Detective {
   }
 
   recordSelectorChange(node: NodeRecord, change: SelectorChange): void {
-    if (node.pendingSelectors.length < 16) node.pendingSelectors.push(change);
+    if (node.pendingSelectors.length >= 16) return;
+    /*
+     * StrictMode double-invokes render, so each selector reports twice for one
+     * commit. Reporting `flights.results, flights.results` would read as two
+     * different selectors.
+     */
+    const already = node.pendingSelectors.some((c) => c.name === change.name && c.source === change.source);
+    if (already) return;
+    node.pendingSelectors.push(change);
   }
 
   /**

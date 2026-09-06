@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Fixed — the unstable-selector diagnosis failed on ordinary data
+
+Verified against real `react-redux` for the first time, rather than a model of it, and it did not
+work. Three defects, all invisible at test-fixture scale:
+
+- **Comparison bounds were the inspection bounds.** A selector returning a 238-item array — an
+  entirely ordinary list — was reported as "too large to compare", so the single most valuable
+  diagnosis silently did nothing. Inspection builds snapshots and must stay small; comparison only
+  runs `Object.is` over elements, costs microseconds, and happens in the deferred flush. They are
+  now separate, and comparison reaches 1 000 array elements and 100 object keys.
+- **Selectors were reported twice**, because StrictMode double-invokes render. `flights.results,
+  flights.results` read as two different selectors.
+- **Derived selectors fell back to a file and line.** `state => state.catalogue.products.filter(…)`
+  now yields `catalogue.products` — the slice it derives from, which is both recognisable and
+  exactly the shape that produces the bug.
+
 ### Added — match store hooks by name, for stores that are not packages
 
 `storeHooks` compares the module specifier exactly, which suits `react-redux` but cannot work for a

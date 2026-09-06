@@ -20,6 +20,11 @@ Then open the console (and the overlay in the bottom-right) and interact with th
 | 4 | `Dashboard` | `rows` recomputed and reallocated on unrelated state changes | reference-only change with identical contents |
 | 5 | `Dashboard` | inline `handleSelect` / `onOpenModal` closures | new function reference each render |
 | 6 | `Dashboard` | `StatusBadge` declared inside the render body | *rebuilt*, not re-rendered — whole subtree discarded each render |
+| 7 | `UnstableSelectorPanel` | a Redux selector that builds a new array every call | re-renders on **every** store update, including ones it reads nothing from |
+
+Problem 7 uses real `react-redux`. Press **Store heartbeat** — it dispatches an action that changes
+nothing either panel reads. `UnstableSelectorPanel` re-renders anyway; `StableSelectorPanel` does
+not. Then run `rrd.explain("UnstableSelectorPanel")`.
 
 Toggle **Show fixed version** to run the same UI with `useMemo` / `useCallback` applied, then
 compare:

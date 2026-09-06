@@ -286,3 +286,18 @@ describe("stores that do not live in a package", () => {
     expect(out).not.toContain("_rrdTrackSelector");
   });
 });
+
+describe("labels for derived selectors", () => {
+  it("names the slice a derived selector reads from", () => {
+    // `state.catalogue.products.filter(...)` — the shape that produces an
+    // unstable selector — should be named for what it derives from.
+    const out = compile(`
+      import { useSelector } from 'react-redux';
+      function Panel() {
+        const inStock = useSelector(s => s.catalogue.products.filter(p => p.stock > 0));
+        return <i>{inStock.length}</i>;
+      }
+    `);
+    expect(out).toContain('name: "catalogue.products"');
+  });
+});
