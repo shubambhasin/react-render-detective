@@ -93,6 +93,53 @@ it would be dishonest to present a headline figure that hides that. What the dat
 Growth is bounded by `maxEvents` and nothing else — statistics for all 200 000 renders are kept in
 fixed-size accumulators. Budget roughly **2.4 KB per retained event** if you raise the cap.
 
+## Does fixing what it reports actually help?
+
+`node bench/before-after.mjs`
+
+The tool could describe problems long before it could show that acting on a report helps. This runs
+an identical interaction — 10 clicks on a 40-row table — against two versions of the same UI. The
+"before" carries three findings the tool reports; the "after" applies exactly the changes it
+suggests and nothing else.
+
+| | before | after | change |
+| --- | ---: | ---: | ---: |
+| renders | 421 | 30 | **93% fewer** |
+| potentially avoidable | 370 | 18 | **95% fewer** |
+| remounts | 10 | 0 | **100% fewer** |
+| render time | 4.3 ms | 3.3 ms | 24% fewer |
+
+Per component:
+
+| | before | after |
+| --- | ---: | ---: |
+| `Row` (×40, memoized) | 400 renders | **0** |
+| `Badge` (declared in the render body) | 10 renders, **10 remounts** | 10 renders, 0 remounts |
+| `Table`, `Screen` | 10 each | 10 each |
+
+The three changes, each one a diagnosis the tool prints:
+
+1. `onSelect` recreated every render, so `memo` on `Row` never held → `useCallback`
+2. `rows` rebuilt every render with identical contents → `useMemo`
+3. `Badge` declared inside the render body, so React rebuilt it rather than re-rendering →
+   moved to module scope
+
+### Reading this honestly
+
+**Render time fell far less than render count** — 24% against 93% — and that is the point rather
+than a disappointment. These rows are trivial, so 400 avoided renders were 400 cheap renders. The
+counts are exact; the milliseconds are jsdom's and indicative only. In an application whose rows do
+real work, the time saved scales with what each render costs, which is precisely why
+`printOpportunities()` ranks by recoverable time rather than by render count.
+
+**`Badge` renders the same number of times in both columns.** The difference is that it was being
+*rebuilt* — new DOM, discarded state — ten times, and now is not. A render count alone would have
+missed it entirely.
+
+**This is a controlled case, not a field study.** It demonstrates the mechanism and the magnitude
+on planted problems. The only stronger evidence is the same measurement on a real application,
+which remains outstanding.
+
 ## What is not measured here
 
 - Real-browser numbers. jsdom's DOM is cheaper than a real one, which *inflates* the relative

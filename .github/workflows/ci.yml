@@ -40,3 +40,6 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: node --expose-gc bench/run.mjs
+      # Fails if the documented fixes stop reducing renders — the claim the
+      # README makes has to keep being true.
+      - run: node bench/before-after.mjs

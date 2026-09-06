@@ -276,6 +276,22 @@ reports both, honestly.
 
 ---
 
+## Does acting on it help?
+
+Identical interaction, same UI, with and without the three fixes the tool reports
+(`node bench/before-after.mjs`):
+
+| | before | after |
+| --- | ---: | ---: |
+| renders | 421 | **30** |
+| potentially avoidable | 370 | **18** |
+| remounts | 10 | **0** |
+
+`Row` went from 400 renders to 0 once `memo` could actually hold. Render *time* fell only 24%,
+because these rows are trivial — the counts are exact, the milliseconds are indicative, and
+[BENCHMARKS.md](docs/BENCHMARKS.md) explains why that gap is the honest result rather than a
+disappointing one.
+
 ## Limitations
 
 Read [docs/FEASIBILITY.md](docs/FEASIBILITY.md) — it classifies every feature as reliable,
