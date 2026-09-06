@@ -1,4 +1,3 @@
-import * as React from "react";
 import { useContext, useEffect, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { getDetective } from "../core/store.js";
@@ -56,45 +55,34 @@ export function useRenderDiagnostics(name: string, props?: Record<string, unknow
 }
 
 /**
- * React 18+. Used only to identify *which* component under an instrumented node
- * owns the tracked state; `useId` is stable across StrictMode's double render,
- * which a `useRef` token would not be. Older React simply loses the guard.
- */
-const useOwnerId: () => string =
-  typeof (React as { useId?: () => string }).useId === "function"
-    ? (React as unknown as { useId: () => string }).useId
-    : () => "";
-
-/**
  * `useState` with a label. The only reliable way to attribute a render to a
  * specific piece of local state without React internals.
  *
  * **Call this inside a component that is itself instrumented** (wrapped with
  * `withRenderDetective`, or using `useRenderDiagnostics`). A hook cannot see
- * which component called it, only the nearest instrumented ancestor — so state
- * named in an uninstrumented descendant would be reported as the ancestor's.
- * The first caller under a given node claims it and later callers are ignored,
- * which stops a descendant from stealing the attribution, but it cannot rescue
- * the case where the ancestor never tracks state of its own.
+ * which component called it, only the nearest instrumented ancestor, so state
+ * named in an uninstrumented descendant is reported as that ancestor's.
+ *
+ * An earlier version tried to prevent that by letting the first caller "claim"
+ * the node, keyed on `useId`. That was wrong: `useId` is unique per *call site*,
+ * not per component, so the first tracked hook in a component locked out every
+ * other one — a selector and two named state values in the same component were
+ * silently discarded. Guarding a rare misattribution was not worth breaking the
+ * common case, and the build plugin makes the rare case rarer still by
+ * instrumenting every component.
  */
 export function useTrackedState<S>(name: string, initial: S | (() => S)): [S, Dispatch<SetStateAction<S>>] {
   const detective = getDetective();
   const node = useContext(AncestryContext);
-  const ownerId = useOwnerId();
   const [state, setState] = useState<S>(initial);
   const previous = useRef<S>(state);
 
-  if (node && node.stateOwner === undefined) node.stateOwner = ownerId;
-  const owns = !node || node.stateOwner === ownerId;
-
-  if (node && owns && !Object.is(previous.current, state)) {
+  if (node && !Object.is(previous.current, state)) {
     detective.recordStateChange(node, {
       name,
       previous: inspect(previous.current, detective.config.inspection),
       current: inspect(state, detective.config.inspection),
     });
-    previous.current = state;
-  } else if (!owns) {
     previous.current = state;
   }
 

@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Fixed — only the first tracked hook in a component was ever attributed
+
+`useTrackedState` and `trackSelector` guarded against a descendant claiming its ancestor's node,
+keyed on `useId`. That was wrong: **`useId` is unique per call site, not per component**, so the
+first tracked hook in a component locked out every other one. A component with a tracked selector
+and two named state values reported only one of them, silently.
+
+Found in a real application, where a single component had exactly that combination — the case a
+fixture with one hook per component cannot produce.
+
+The guard is removed. A hook cannot see which component called it, only the nearest instrumented
+ancestor, so state or a selector named in an uninstrumented descendant is attributed to that
+ancestor. That is now documented rather than half-prevented, and the build plugin makes it rare by
+instrumenting every component.
+
 ### Changed — values of ordinary size are now compared, which changes some conclusions
 
 This began as a selector fix and is broader than that, so it is called out separately.

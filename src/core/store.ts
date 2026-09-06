@@ -89,11 +89,6 @@ interface NodeRecord {
   everAttached?: boolean;
   /** Currently detached. Cleared if the same node re-attaches (StrictMode does exactly that). */
   detached?: boolean;
-  /**
-   * `useId` of the first component to call `useTrackedState` under this node.
-   * Later callers (descendants) cannot claim state attribution from it.
-   */
-  stateOwner?: string;
   renderNumber: number;
   lastCommitTime: number;
   durations: number[];

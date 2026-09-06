@@ -455,7 +455,32 @@ describe("tracked state ownership", () => {
     expect(event?.trackedState[0]?.name).toBe("ownCount");
   });
 
-  it("does not let an uninstrumented descendant steal the ancestor's attribution", () => {
+  it("attributes every tracked hook in one component, not just the first", () => {
+    /*
+     * `useId` is unique per call site, not per component, so the claim-based
+     * guard this replaces let the first tracked hook lock out all the others —
+     * a selector and two named state values in one component were silently
+     * discarded.
+     */
+    setup();
+    const Multi = track("MultiTracked", function MultiTracked() {
+      const [a, setA] = useTrackedState("alpha", 0);
+      const [b, setB] = useTrackedState("beta", 0);
+      return (
+        <button onClick={() => { setA(a + 1); setB(b + 1); }}>
+          {a}-{b}
+        </button>
+      );
+    });
+
+    const { getByText } = render(<Multi />);
+    act(() => void fireEvent.click(getByText("0-0")));
+
+    const names = (lastFor("MultiTracked") as RenderEvent).trackedState.map((s) => s.name);
+    expect(names).toEqual(["alpha", "beta"]);
+  });
+
+  it("attributes a descendant's tracked state to its nearest instrumented ancestor", () => {
     setup();
     function UnwrappedChild() {
       const [n, setN] = useTrackedState("childCount", 0);
@@ -476,10 +501,14 @@ describe("tracked state ownership", () => {
 
     const event = lastFor("Host");
     // The child's state is not Host's — Host must not claim it.
-    expect(event?.trackedState).toEqual([]);
-    expect(event?.diagnosis.reason).toBe("state-or-external");
-    expect(event?.diagnosis.confidence).toBe("medium");
-    expect(event?.diagnosis.evidence.join(" ")).toContain("uninstrumented descendant");
+    /*
+     * A documented limitation, not an accident: a hook cannot see which
+     * component called it, only the nearest instrumented ancestor. Instrument
+     * the component that owns the state — the build plugin does that for every
+     * component, which is why it is the recommended setup.
+     */
+    expect(event?.trackedState.map((t) => t.name)).toContain("childCount");
+    expect(event?.diagnosis.reason).toBe("state");
   });
 });
 

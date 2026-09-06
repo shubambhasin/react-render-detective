@@ -12,18 +12,11 @@
  * matters most — a selector that builds a new object on every call, which makes
  * the component re-render on *every* store update.
  */
-import * as React from "react";
 import { useContext, useRef } from "react";
 import { shallowEqual } from "../core/compare.js";
 import { inspect } from "../core/inspect.js";
 import { getDetective } from "../core/store.js";
 import { AncestryContext } from "./ancestry.js";
-
-/** React 18+. Identifies the calling component so a descendant cannot steal attribution. */
-const useOwnerId: () => string =
-  typeof (React as { useId?: () => string }).useId === "function"
-    ? (React as unknown as { useId: () => string }).useId
-    : () => "";
 
 export interface TrackSelectorOptions {
   /** Readable label — a property path where one could be derived, else the call site. */
@@ -41,21 +34,14 @@ export interface TrackSelectorOptions {
 export function trackSelector<T>(value: T, options: TrackSelectorOptions = {}): T {
   const detective = getDetective();
   const node = useContext(AncestryContext);
-  const ownerId = useOwnerId();
   const previous = useRef<{ value: T } | undefined>(undefined);
 
   if (!detective.enabled) return value;
 
-  // Same ownership rule as useTrackedState: the first caller under a node claims
-  // it, so a selector in an uninstrumented descendant cannot be reported as the
-  // ancestor's. Several selectors in one component share its id, so they all pass.
-  if (node && node.stateOwner === undefined) node.stateOwner = ownerId;
-  const owns = !node || node.stateOwner === ownerId;
-
   const prior = previous.current;
   previous.current = { value };
 
-  if (!prior || !node || !owns) return value;
+  if (!prior || !node) return value;
   if (Object.is(prior.value, value)) return value;
 
   try {
