@@ -5,6 +5,13 @@ npm run build
 node --expose-gc bench/run.mjs
 ```
 
+**Last re-measured at 0.6.0.** The numbers below are from the current build, not from an old one —
+they were first taken at 0.1.0, and since then the package gained the diagnostic engine, remount
+detection, opportunity ranking, interaction attribution, colouring and store attribution. The
+per-component cost did not move, because that work happens **off the render path**: the render path
+still only increments a counter and stores a props reference, and everything else runs in a
+microtask after the commit or behind an opt-in.
+
 Environment: Node 24, jsdom, React 19 development build, Apple Silicon. jsdom is not a browser, so
 read these as **relative** numbers — identical workloads with and without instrumentation,
 interleaved in one process, median of 7 samples of 20 full-tree updates.
@@ -17,9 +24,9 @@ the most, since every render produces a prop diff.
 
 | components | baseline | structural (wrapped, disabled) | default | deep inspection |
 | ---: | ---: | ---: | ---: | ---: |
-| 100 | 1.31 ms | 1.82 ms (+38.6%) | 2.23 ms (+69.7%) | 2.19 ms (+66.7%) |
-| 1 000 | 18.36 ms | 21.49 ms (+17.1%) | 28.93 ms (+57.6%) | 25.97 ms (+41.5%) |
-| 5 000 | 84.80 ms | 119.73 ms (+41.2%) | 146.12 ms (+72.3%) | 145.34 ms (+71.4%) |
+| 100 | 1.24 ms | 1.83 ms (+48.0%) | 2.02 ms (+63.3%) | 2.17 ms (+75.2%) |
+| 1 000 | 18.29 ms | 21.10 ms (+15.4%) | 28.62 ms (+56.5%) | 25.46 ms (+39.2%) |
+| 5 000 | 83.72 ms | 115.63 ms (+38.1%) | 139.38 ms (+66.5%) | 140.07 ms (+67.3%) |
 
 Two costs are separated deliberately:
 
@@ -36,12 +43,13 @@ the `style` object; depth mainly costs on large nested props.
 
 | components | structural | recording | total |
 | ---: | ---: | ---: | ---: |
-| 100 | 5.05 µs | 4.09 µs | 9.14 µs |
-| 1 000 | 3.13 µs | 7.44 µs | 10.57 µs |
-| 5 000 | 6.99 µs | 5.28 µs | 12.26 µs |
+| 100 | 5.94 µs | 1.89 µs | 7.83 µs |
+| 1 000 | 2.81 µs | 7.52 µs | 10.33 µs |
+| 5 000 | 6.38 µs | 4.75 µs | 11.13 µs |
 
-**≈ 0.009–0.012 ms per instrumented component**, against the 0.1 ms target in the spec — met with
-roughly 8× headroom.
+**≈ 0.008–0.011 ms per instrumented component**, against the 0.1 ms target — met with roughly 9×
+headroom, and unchanged from 0.1.0 despite six releases of features. The split between structural
+and recording moves around between runs; the total is the stable figure.
 
 ## Overhead at realistic instrumentation levels
 
@@ -49,9 +57,14 @@ Same 2 000-component tree; only the share of wrapped components changes.
 
 | instrumented | baseline | instrumented | overhead |
 | ---: | ---: | ---: | ---: |
-| 40 (2%) | 35.02 ms | 36.89 ms | **+5.3%** |
-| 200 (10%) | 36.22 ms | 38.34 ms | **+5.9%** |
-| 1 000 (50%) | 35.55 ms | 49.42 ms | +39.0% |
+| 40 (2%) | 34.07 ms | 32.95 ms | **−3.3%** |
+| 200 (10%) | 34.25 ms | 36.26 ms | **+5.9%** |
+| 1 000 (50%) | 34.36 ms | 45.15 ms | +31.4% |
+
+The 2% row came out *negative* — the instrumented arm measured faster than the baseline, which is
+impossible. It is measurement noise, and the honest reading is that at 2% instrumentation the
+overhead is **below what this harness can resolve**, not that the tool makes an app faster. Treat
+anything under about 5% here as noise.
 
 ### Honest reading of these numbers
 

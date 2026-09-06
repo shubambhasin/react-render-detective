@@ -303,11 +303,23 @@ import { useStore } from "./my-zustand-store";
 export const useTrackedStore = createTrackedSelectorHook(useStore);
 ```
 
-Or point the plugin at your own hook:
+Or point the plugin at your own hook. For a **package**, match the module:
 
 ```ts
-renderDetective({ storeHooks: { "my-zustand-store": ["useStore"] } })
+renderDetective({ storeHooks: { "react-redux": ["useSelector"] } })   // the default
 ```
+
+`storeHooks` compares the module specifier **exactly**, which suits packages but not a local store:
+a Zustand store lives in your own module, so its specifier differs in every file that imports it —
+`../store`, `@/store`, `./state/store`. Match the hook **name** instead:
+
+```ts
+renderDetective({ storeHookNames: ["useStore", "useCartStore"] })
+```
+
+That works from any module, and covers default imports too. It is empty by default and deliberately
+opt-in: a bare name is a blunter instrument than a package, and silently wrapping someone else's
+identically-named hook would be worse than not wrapping at all.
 
 Extra arguments pass straight through to the real hook — react-redux's equality function included —
 because changing them would change your app's behaviour. Set `trackStores: false` to turn the

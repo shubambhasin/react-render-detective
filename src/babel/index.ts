@@ -35,10 +35,24 @@ export interface RenderDetectivePluginOptions {
    */
   trackStores?: boolean;
   /**
-   * Which hooks to wrap, as `package` → hook names. Defaults to react-redux's
-   * `useSelector`. Add your own store's hook here.
+   * Which hooks to wrap, as `package` → hook names. The module specifier must
+   * match **exactly**, so this suits packages (`react-redux`) rather than local
+   * modules, whose specifier differs per importing file (`../store`, `@/store`).
+   * Defaults to react-redux's `useSelector`.
    */
   storeHooks?: Record<string, string[]>;
+  /**
+   * Hook names to wrap regardless of where they are imported from.
+   *
+   * This is what a Zustand-style store needs: `export const useStore = create(…)`
+   * lives in a local module, so no single specifier identifies it. Matching on
+   * the imported name works from any file.
+   *
+   * Empty by default — a bare name is a blunter instrument than a package, and
+   * silently wrapping someone else's identically-named hook would be worse than
+   * not wrapping at all.
+   */
+  storeHookNames?: string[];
 }
 
 interface State extends PluginPass {
@@ -254,12 +268,22 @@ export default function renderDetectiveBabelPlugin(
       ImportDeclaration(path: NodePath<BabelTypes.ImportDeclaration>, state: State) {
         if (state.opts.trackStores === false) return;
         const hooks = state.opts.storeHooks ?? DEFAULT_STORE_HOOKS;
-        const wanted = hooks[path.node.source.value];
-        if (!wanted) return;
+        const byModule = hooks[path.node.source.value] ?? [];
+        const byName = state.opts.storeHookNames ?? [];
+        if (byModule.length === 0 && byName.length === 0) return;
+
         for (const specifier of path.node.specifiers) {
+          // `import useStore from "../store"` — a default export is named only
+          // at the import site, so match on the local name.
+          if (t.isImportDefaultSpecifier(specifier)) {
+            if (byName.includes(specifier.local.name)) (state.rrdStoreHooks ??= new Set()).add(specifier.local.name);
+            continue;
+          }
           if (!t.isImportSpecifier(specifier)) continue;
           const imported = t.isIdentifier(specifier.imported) ? specifier.imported.name : specifier.imported.value;
-          if (wanted.includes(imported)) (state.rrdStoreHooks ??= new Set()).add(specifier.local.name);
+          if (byModule.includes(imported) || byName.includes(imported)) {
+            (state.rrdStoreHooks ??= new Set()).add(specifier.local.name);
+          }
         }
       },
 

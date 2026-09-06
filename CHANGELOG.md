@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### Added — match store hooks by name, for stores that are not packages
+
+`storeHooks` compares the module specifier exactly, which suits `react-redux` but cannot work for a
+Zustand-style store: `export const useStore = create(…)` lives in your own module, so its specifier
+differs in every file that imports it — `../store`, `@/store`, `./state/store`. `storeHookNames`
+matches the hook name from any module, default imports included. Empty by default, because a bare
+name is a blunter instrument than a package.
+
+### Changed — benchmarks re-measured
+
+The published overhead figures dated from 0.1.0, six releases and a great deal of code ago. Re-run
+against the current build: **≈8–11 µs per instrumented component and ≈6% at realistic
+instrumentation levels** — unchanged, because the added work happens off the render path.
+
+One row came out *negative* (2% instrumentation measured faster than baseline), which is impossible.
+It is noise, and [BENCHMARKS.md](docs/BENCHMARKS.md) now says so rather than quoting a flattering
+number: anything under about 5% in that harness is below what it can resolve.
+
 ## 0.6.0
 
 ### Added — external-store attribution

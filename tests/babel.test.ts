@@ -250,3 +250,39 @@ describe("store hook tracking", () => {
     expect(out).not.toContain("_rrdTrackSelector");
   });
 });
+
+describe("stores that do not live in a package", () => {
+  it("matches a hook by name from any module, which is what Zustand needs", () => {
+    // `export const useStore = create(...)` lives in a local module, so the
+    // specifier differs per importing file — `../store`, `@/store`, `./store`.
+    // Matching the module exactly cannot work; matching the name can.
+    const code = (from: string) => `
+      import { useStore } from '${from}';
+      function Cart() {
+        const items = useStore(s => s.cart.items);
+        return <i>{items.length}</i>;
+      }
+    `;
+    for (const from of ["../store", "@/store", "./state/store"]) {
+      const out = compile(code(from), { storeHookNames: ["useStore"] });
+      expect(out).toContain('name: "cart.items"');
+    }
+  });
+
+  it("matches a default-imported store hook", () => {
+    const out = compile(
+      `import useStore from '../store';
+       function Cart() { const n = useStore(s => s.count); return <i>{n}</i>; }`,
+      { storeHookNames: ["useStore"] },
+    );
+    expect(out).toContain('name: "count"');
+  });
+
+  it("wraps nothing by name unless asked, since a bare name is a blunt instrument", () => {
+    const out = compile(
+      `import { useStore } from '../store';
+       function Cart() { const n = useStore(s => s.count); return <i>{n}</i>; }`,
+    );
+    expect(out).not.toContain("_rrdTrackSelector");
+  });
+});
