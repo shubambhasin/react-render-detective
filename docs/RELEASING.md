@@ -130,6 +130,30 @@ The `Release` workflow then, on the tag:
 
 Step 7 is the backstop: it checks what actually landed, not what was meant to land.
 
+## Watching a run
+
+```bash
+npm run release:watch -- v0.6.0    # the release for a tag
+npm run ci:watch                   # CI for HEAD
+```
+
+Use this rather than an ad-hoc poll. The obvious one-liner is wrong:
+
+```bash
+# BROKEN — do not use
+until [ "$(gh run list --limit 1 --json status -q '.[0].status')" = completed ]; do sleep 10; done
+```
+
+Immediately after a push the new run does not exist yet, so `--limit 1` returns the **previous**
+run, which is already `completed`. The loop exits at once and reports the wrong run's result. During
+the 0.6.0 release that reported a still-running publish as finished, and then — when the registry
+did not yet have the version — as a pipeline failure. Both readings were wrong, and the pipeline was
+fine.
+
+`watch-release.mjs` matches on the **head commit**, never on recency: it waits for a run for that
+exact SHA to appear (failing with a clear message if none does), then waits for that run to finish,
+then reports per-job results and exits non-zero on failure.
+
 ## The guard
 
 `npm run verify` (also wired to `prepublishOnly`, so a local publish is blocked too) checks the
