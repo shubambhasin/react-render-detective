@@ -39,14 +39,34 @@ try {
 }
 const short = sha.slice(0, 7);
 
+/*
+ * A transient API failure is not a verdict.
+ *
+ * The first version exited on any `gh` error, so a TLS handshake timeout during
+ * a ten-minute wait aborted the watch and looked like a failed run — the same
+ * mistake as before, dressed differently: reporting a conclusion that came from
+ * infrastructure rather than from the run.
+ */
+const MAX_CONSECUTIVE_API_FAILURES = 5;
+let consecutiveFailures = 0;
+
 function listRuns() {
   try {
-    return JSON.parse(
+    const runs = JSON.parse(
       sh("gh", ["run", "list", "--workflow", workflow, "--limit", "20", "--json", "databaseId,headSha,status,conclusion,createdAt"]),
     );
+    consecutiveFailures = 0;
+    return runs;
   } catch (error) {
-    console.error(`gh failed: ${error instanceof Error ? error.message : String(error)}`);
-    process.exit(1);
+    consecutiveFailures++;
+    const message = error instanceof Error ? error.message.split("\n")[0] : String(error);
+    if (consecutiveFailures >= MAX_CONSECUTIVE_API_FAILURES) {
+      console.error(`\ngh failed ${consecutiveFailures} times in a row, giving up: ${message}`);
+      console.error("The run itself may still be fine — check GitHub directly.");
+      process.exit(1);
+    }
+    console.warn(`  gh call failed (${consecutiveFailures}/${MAX_CONSECUTIVE_API_FAILURES}), retrying: ${message}`);
+    return null;
   }
 }
 
@@ -59,7 +79,7 @@ console.log(`Waiting for a ${workflow} run for ${ref} (${short})…`);
 let run;
 const appearDeadline = Date.now() + RUN_APPEAR_TIMEOUT_MS;
 while (!run) {
-  run = listRuns().find((r) => r.headSha === sha);
+  run = listRuns()?.find((r) => r.headSha === sha);
   if (run) break;
   if (Date.now() > appearDeadline) {
     console.error(
@@ -80,11 +100,17 @@ while (run.status !== "completed") {
     process.exit(1);
   }
   await sleep(POLL_MS);
-  const refreshed = listRuns().find((r) => r.databaseId === run.databaseId);
+  const refreshed = listRuns()?.find((r) => r.databaseId === run.databaseId);
   if (refreshed) run = refreshed;
 }
 
-const steps = JSON.parse(sh("gh", ["run", "view", String(run.databaseId), "--json", "jobs"]));
+let steps;
+try {
+  steps = JSON.parse(sh("gh", ["run", "view", String(run.databaseId), "--json", "jobs"]));
+} catch {
+  // The run's conclusion is already known; per-step detail is a nicety.
+  steps = { jobs: [] };
+}
 const failed = [];
 for (const job of steps.jobs ?? []) {
   for (const step of job.steps ?? []) {
