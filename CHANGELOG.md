@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Changed — values of ordinary size are now compared, which changes some conclusions
+
+This began as a selector fix and is broader than that, so it is called out separately.
+
+`shallowEqual` backs **four** diagnoses: prop changes, React element props, tracked context values,
+and store selectors. It was using the *inspection* limits — 20 array elements, 20 object keys —
+so anything larger was reported as "reference changed, contents unknown" and never flagged as
+avoidable.
+
+Raising the comparison bounds to 1 000 elements and 100 keys means some renders that were
+previously described as an unknown-contents change are now correctly identified as
+**reference-only, contents identical** — and therefore counted as potentially avoidable. Expect
+avoidable counts to rise in apps that pass lists or wide objects as props. That is the tool getting
+more accurate, not the app getting worse.
+
+Re-benchmarked after the change: 9.1–11.8 µs per instrumented component, unchanged. The comparison
+runs in the deferred flush, never on the render path.
+
 ### Fixed — the unstable-selector diagnosis failed on ordinary data
 
 Verified against real `react-redux` for the first time, rather than a model of it, and it did not

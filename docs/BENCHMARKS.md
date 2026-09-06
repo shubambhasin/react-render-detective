@@ -5,7 +5,7 @@ npm run build
 node --expose-gc bench/run.mjs
 ```
 
-**Last re-measured at 0.6.0.** The numbers below are from the current build, not from an old one —
+**Last re-measured after the 0.7.0 comparison-bound change.** The numbers below are from the current build, not from an old one —
 they were first taken at 0.1.0, and since then the package gained the diagnostic engine, remount
 detection, opportunity ranking, interaction attribution, colouring and store attribution. The
 per-component cost did not move, because that work happens **off the render path**: the render path
