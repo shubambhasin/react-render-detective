@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.6.1
+
+Four fixes, every one found by running the tool against a real application rather than a fixture.
+Released as a patch so it reaches existing installs: each one is a documented feature that did not
+actually work.
 
 ### Fixed — only the first tracked hook in a component was ever attributed
 
